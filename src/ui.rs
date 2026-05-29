@@ -35,6 +35,7 @@ pub fn print_artifacts(
     artifact_dir: &Path,
     archived_diff_path: &Path,
     archived_prompt_path: &Path,
+    run_copilot: bool,
 ) {
     println!(
         "{}Diff written to:   {}{}",
@@ -68,12 +69,14 @@ pub fn print_artifacts(
         RESET
     );
     println!("{LINE}");
-    println!("{BLACK_BOLD}Run Copilot manually with:{RESET}");
-    println!(
-        "  {BLACK_BOLD}copilot -p \"$(cat {})\"{RESET}",
-        prompt_path.display()
-    );
-    println!("{LINE}");
+    if !run_copilot {
+        println!("{BLACK_BOLD}Run Copilot manually with:{RESET}");
+        println!(
+            "  {BLACK_BOLD}copilot -p \"$(cat {})\"{RESET}",
+            prompt_path.display()
+        );
+        println!("{LINE}");
+    }
 }
 
 pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration) {

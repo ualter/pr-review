@@ -54,6 +54,7 @@ fn main() -> Result<()> {
         &artifact_dir,
         &archived_diff_path,
         &archived_prompt_path,
+        common.run_copilot,
     );
 
     if common.run_copilot {
