@@ -96,15 +96,11 @@ fn main() -> Result<()> {
     };
 
     let prompt = build_prompt(&input);
-
-    let artifacts_dir = PathBuf::from("review-artifacts");
-    fs::create_dir_all(&artifacts_dir)?;
-
-    let tmp_dir = std::env::temp_dir();
-
+    let tmp_dir = env::temp_dir();
     let diff_path = tmp_dir.join(format!("{}-diff.patch", input.artifact_prefix));
     let prompt_path = tmp_dir.join(format!("{}-copilot-prompt.txt", input.artifact_prefix));
     let report_path = PathBuf::from(format!("{}-review.md", input.artifact_prefix));
+    let artifact_dir = review_artifact_dir(&input.artifact_prefix)?;
 
     print_header(
         &input.repository,
@@ -113,42 +109,71 @@ fn main() -> Result<()> {
         &input.review_ref,
     );
 
-    fs::write(&diff_path, &input.diff)?;
-    fs::write(&prompt_path, &prompt)?;
+    fs::write(&diff_path, &input.diff)
+        .with_context(|| format!("Failed to write diff file: {}", diff_path.display()))?;
 
-    print_artifacts(&diff_path, &prompt_path);
+    fs::write(&prompt_path, &prompt)
+        .with_context(|| format!("Failed to write prompt file: {}", prompt_path.display()))?;
+
+    let archived_diff_path = artifact_dir.join("diff.patch");
+    let archived_prompt_path = artifact_dir.join("prompt.txt");
+
+    fs::copy(&diff_path, &archived_diff_path).with_context(|| {
+        format!(
+            "Failed to archive diff from {} to {}",
+            diff_path.display(),
+            archived_diff_path.display()
+        )
+    })?;
+
+    fs::copy(&prompt_path, &archived_prompt_path).with_context(|| {
+        format!(
+            "Failed to archive prompt from {} to {}",
+            prompt_path.display(),
+            archived_prompt_path.display()
+        )
+    })?;
+    print_artifacts(
+        &diff_path,
+        &prompt_path,
+        &artifact_dir,
+        &archived_diff_path,
+        &archived_prompt_path,
+    );
 
     if common.run_copilot {
         println!("{YELLOW}Sending prompt to Copilot...{RESET}");
 
         let copilot_start = Instant::now();
 
-        let (stop, handle) = start_spinner("Copilot is reviewing...");
         let prompt_arg = fs::read_to_string(&prompt_path)?;
-        if TESTING {
-            // Replace prompt_arg with a static string for testing
-            let prompt_arg = String::from("1+1 is");
-            let result = run_command(Path::new("."), "copilot", &["-p", &prompt_arg]);
-            stop.store(true, Ordering::Relaxed);
-            handle.join().ok();
-            let review = result?;
-            fs::write(&report_path, review)?;
-            print_report(&report_path, &report_path, copilot_start.elapsed());
-            println!(
-                "{GREEN}Done in {:.2}s{RESET}",
-                start.elapsed().as_secs_f64()
-            );
-            return Ok(());
-        }
+        let prompt_arg = if TESTING {
+            "1+1 is".to_string()
+        } else {
+            prompt_arg
+        };
+
+        let (stop, handle) = start_spinner("Copilot is reviewing...");
+
         let result = run_command(Path::new("."), "copilot", &["-p", &prompt_arg]);
 
         stop.store(true, Ordering::Relaxed);
         handle.join().ok();
 
         let review = result?;
-        fs::write(&report_path, review)?;
 
-        let archived_report_path = archive_report(&report_path)?;
+        fs::write(&report_path, review)
+            .with_context(|| format!("Failed to write report file: {}", report_path.display()))?;
+
+        let archived_report_path = artifact_dir.join("review.md");
+
+        fs::copy(&report_path, &archived_report_path).with_context(|| {
+            format!(
+                "Failed to archive report from {} to {}",
+                report_path.display(),
+                archived_report_path.display()
+            )
+        })?;
 
         print_report(&report_path, &archived_report_path, copilot_start.elapsed());
     }
@@ -445,7 +470,13 @@ fn print_header(repository: &str, source: &str, target: &str, review_branch: &st
     println!("{LINE}");
 }
 
-fn print_artifacts(diff_path: &Path, prompt_path: &Path) {
+fn print_artifacts(
+    diff_path: &Path,
+    prompt_path: &Path,
+    artifact_dir: &Path,
+    archived_diff_path: &Path,
+    archived_prompt_path: &Path,
+) {
     println!(
         "{}Diff written to:   {}{}",
         GREEN_BOLD,
@@ -459,11 +490,31 @@ fn print_artifacts(diff_path: &Path, prompt_path: &Path) {
         RESET
     );
     println!("{LINE}");
+    println!(
+        "{}Artifacts archived to: {}{}",
+        GREEN_BOLD,
+        artifact_dir.display(),
+        RESET
+    );
+    println!(
+        "{}Archived diff:     {}{}",
+        GREEN_BOLD,
+        archived_diff_path.display(),
+        RESET
+    );
+    println!(
+        "{}Archived prompt:   {}{}",
+        BLUE_BOLD,
+        archived_prompt_path.display(),
+        RESET
+    );
+    println!("{LINE}");
     println!("{BLACK_BOLD}Run Copilot manually with:{RESET}");
     println!(
         "  {BLACK_BOLD}copilot -p \"$(cat {})\"{RESET}",
         prompt_path.display()
     );
+    println!("{LINE}");
 }
 
 fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration) {
@@ -505,29 +556,15 @@ fn reports_archive_dir() -> Result<PathBuf> {
     Ok(PathBuf::from(home).join(".pr-review").join("reports"))
 }
 
-fn archive_report(report_path: &Path) -> Result<PathBuf> {
-    let archive_dir = reports_archive_dir()?;
+fn review_artifact_dir(review_name: &str) -> Result<PathBuf> {
+    let dir = reports_archive_dir()?.join(review_name);
 
-    fs::create_dir_all(&archive_dir).with_context(|| {
+    fs::create_dir_all(&dir).with_context(|| {
         format!(
-            "Failed to create reports archive dir: {}",
-            archive_dir.display()
+            "Failed to create review artifact directory: {}",
+            dir.display()
         )
     })?;
 
-    let file_name = report_path
-        .file_name()
-        .context("Report path has no file name")?;
-
-    let archived_path = archive_dir.join(file_name);
-
-    fs::copy(report_path, &archived_path).with_context(|| {
-        format!(
-            "Failed to copy report from {} to {}",
-            report_path.display(),
-            archived_path.display()
-        )
-    })?;
-
-    Ok(archived_path)
+    Ok(dir)
 }

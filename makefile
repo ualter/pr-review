@@ -18,3 +18,8 @@ review-pr: ## Review a CodeCommit Pull Request with GitHub Copilot CLI
 
 review-commit: ## Review a CodeCommit Commit with GitHub Copilot CLI
 	cargo run --release commit 5ceeb10f2c37a9d85d6ce26ba31d0f080e352603 --run-copilot --repo-path $(repo_path)
+
+distr-local: build  ## Build the project and prepare a local distribution
+	cargo build --release
+	mkdir -p ~/.local/bin
+	cp target/release/pr-review ~/.local/bin/
