@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use serde_json::Value;
 use std::{
-    fs,
+    env, fs,
     io::{self, Write},
     path::{Path, PathBuf},
     process::Command,
@@ -133,7 +133,7 @@ fn main() -> Result<()> {
             handle.join().ok();
             let review = result?;
             fs::write(&report_path, review)?;
-            print_report(&report_path, copilot_start.elapsed());
+            print_report(&report_path, &report_path, copilot_start.elapsed());
             println!(
                 "{GREEN}Done in {:.2}s{RESET}",
                 start.elapsed().as_secs_f64()
@@ -148,8 +148,9 @@ fn main() -> Result<()> {
         let review = result?;
         fs::write(&report_path, review)?;
 
-        // println!("{GREEN}Review saved:{RESET} {}", report_path.display());
-        print_report(&report_path, copilot_start.elapsed());
+        let archived_report_path = archive_report(&report_path)?;
+
+        print_report(&report_path, &archived_report_path, copilot_start.elapsed());
     }
 
     println!(
@@ -229,7 +230,6 @@ fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
         ),
         prompt_scope: "Review ONLY the changes contained in this PR diff file. Treat this diff as the source of truth.".to_string(),
         artifact_prefix: format!("codecommit-pr-{pr_id}"),
-
         repository,
         source: source_branch.clone(),
         target: destination_branch.clone(),
@@ -434,7 +434,7 @@ fn start_spinner(message: &'static str) -> (Arc<AtomicBool>, thread::JoinHandle<
 }
 
 const LINE: &str =
-    "-------------------------------------------------------------------------------";
+    "----------------------------------------------------------------------------------------------------------------";
 
 fn print_header(repository: &str, source: &str, target: &str, review_branch: &str) {
     println!("{LINE}");
@@ -466,7 +466,7 @@ fn print_artifacts(diff_path: &Path, prompt_path: &Path) {
     );
 }
 
-fn print_report(report_path: &Path, elapsed: Duration) {
+fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration) {
     println!(
         "{}Copilot review completed in {:.1}s{}",
         GREEN_BOLD,
@@ -475,9 +475,17 @@ fn print_report(report_path: &Path, elapsed: Duration) {
     );
     println!("{LINE}");
     println!(
-        "{}Review report written to: {}{}",
+        "{}Review report written to: {}{}{}",
         GREEN_BOLD,
+        BLUE_BOLD,
         report_path.display(),
+        RESET
+    );
+    println!(
+        "{}Archived report written to: {}{}{}",
+        GREEN_BOLD,
+        BLUE_BOLD,
+        archived_path.display(),
         RESET
     );
     println!("{LINE}");
@@ -489,4 +497,37 @@ fn repo_name(repo_path: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("unknown-repository")
         .to_string()
+}
+
+fn reports_archive_dir() -> Result<PathBuf> {
+    let home = env::var("HOME").context("Could not resolve HOME directory")?;
+
+    Ok(PathBuf::from(home).join(".pr-review").join("reports"))
+}
+
+fn archive_report(report_path: &Path) -> Result<PathBuf> {
+    let archive_dir = reports_archive_dir()?;
+
+    fs::create_dir_all(&archive_dir).with_context(|| {
+        format!(
+            "Failed to create reports archive dir: {}",
+            archive_dir.display()
+        )
+    })?;
+
+    let file_name = report_path
+        .file_name()
+        .context("Report path has no file name")?;
+
+    let archived_path = archive_dir.join(file_name);
+
+    fs::copy(report_path, &archived_path).with_context(|| {
+        format!(
+            "Failed to copy report from {} to {}",
+            report_path.display(),
+            archived_path.display()
+        )
+    })?;
+
+    Ok(archived_path)
 }
