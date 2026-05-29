@@ -1,0 +1,40 @@
+/target
+$CARGO_HOME/
+**/*.rs.bk
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.bak
+*.tmp
+*.log
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+# Byebug command history
+.byebug_history
+# Rust/Cargo
+/Cargo.lock
+/target/
+/.cargo/
+/.rustup/
+# Coverage
+coverage/
+*.profraw
+*.profdata
+# Test output
+debug/
+release/
+# Misc
+node_modules/
+*.old
+*.orig
+*.rej
+
+codecommit-pr*.md
+commit-*.md
+review-artifacts/
