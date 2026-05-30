@@ -136,3 +136,21 @@ pub fn start_spinner(message: &'static str) -> (Arc<AtomicBool>, thread::JoinHan
 
     (stop, handle)
 }
+
+pub fn print_interactive_help(tool: &AiTool) {
+    println!("{LINE}");
+    println!(
+        "{YELLOW_BOLD}Interactive session - {BLUE_BOLD}{}{RESET}",
+        tool.display_name()
+    );
+    println!();
+    println!("{GREEN_BOLD}Commands:{RESET}");
+    println!("  {YELLOW}/help{RESET}   {BLACK_BOLD}Show this help{RESET}");
+    println!("  {YELLOW}/exit{RESET}   {BLACK_BOLD}Exit interactive session{RESET}");
+    println!();
+    println!(
+        "Anything else is sent to {BLUE_BOLD}{}{RESET}.",
+        tool.display_name()
+    );
+    println!("{LINE}");
+}

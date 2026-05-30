@@ -9,7 +9,7 @@ use std::{
 use crate::{
     artifacts::run_ai_tool,
     cli::{AiTool, ReviewInput},
-    ui::{BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW_BOLD},
+    ui::{print_interactive_help, BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW_BOLD},
 };
 
 pub struct SelectedContext {
@@ -112,42 +112,55 @@ pub fn run_interactive_session(
             continue;
         }
 
-        if matches!(user_question, "/exit") {
-            println!("{LINE}");
-            println!(
-                "{}Conversation saved to:{} {}",
-                GREEN_BOLD,
-                RESET,
-                session.conversation_path.display()
-            );
-            println!("{LINE}");
-            break;
+        match user_question {
+            "/help" => {
+                print_interactive_help(tool);
+                continue;
+            }
+            "/exit" => {
+                println!("{LINE}");
+                println!(
+                    "{}Conversation saved to:{} {}",
+                    GREEN_BOLD,
+                    RESET,
+                    session.conversation_path.display()
+                );
+                println!("{LINE}");
+                break;
+            }
+            "/quit" => {
+                println!("Use /exit to leave the session.");
+                continue;
+            }
+            "" => continue,
+            _ => process_user_question(input, tool, &session, user_question)?,
         }
 
-        let force_full_diff = user_question == "/full";
-
-        let actual_question = if force_full_diff {
-            "Review the whole diff again and tell me if there is anything important we missed."
-        } else {
-            user_question
-        };
-
-        session.append_user_message(actual_question)?;
-
-        let context =
-            select_context_for_question(&session, input, actual_question, force_full_diff)?;
-
-        let prompt = build_chat_prompt(input, actual_question, &context);
-
-        let answer = run_ai_tool(tool, &prompt)?;
-
-        println!("\n{}\n", answer);
-
-        session.append_ai_message(&answer)?;
-
-        update_conversation_summary(&session, tool)?;
+        process_user_question(input, tool, &session, user_question)?;
     }
 
+    Ok(())
+}
+
+fn process_user_question(
+    input: &ReviewInput,
+    tool: &AiTool,
+    session: &ReviewSession,
+    user_question: &str,
+) -> Result<(), anyhow::Error> {
+    let force_full_diff = user_question == "/full";
+    let actual_question = if force_full_diff {
+        "Review the whole diff again and tell me if there is anything important we missed."
+    } else {
+        user_question
+    };
+    session.append_user_message(actual_question)?;
+    let context = select_context_for_question(session, input, actual_question, force_full_diff)?;
+    let prompt = build_chat_prompt(input, actual_question, &context);
+    let answer = run_ai_tool(tool, &prompt)?;
+    println!("\n{}\n", answer);
+    session.append_ai_message(&answer)?;
+    update_conversation_summary(session, tool)?;
     Ok(())
 }
 
