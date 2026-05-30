@@ -15,9 +15,15 @@ use artifacts::{
 use cli::{Cli, Commands, CommonArgs, ReviewInput};
 use review::{build_prompt, review_commit, review_pr};
 use session::resume_interactive_session;
-use ui::{print_artifacts, print_header, print_report, start_spinner, GREEN, RESET, YELLOW};
+use ui::{
+    print_artifacts, print_header, print_report, start_spinner, GREEN, GREEN_BOLD, RESET, YELLOW,
+};
 
-use crate::{artifacts::list_review_sessions, cli::SessionCommand, ui::print_sessions};
+use crate::{
+    artifacts::{list_review_sessions, select_review_session},
+    cli::SessionCommand,
+    ui::{print_sessions, print_startup_banner},
+};
 
 const TESTING: bool = false;
 
@@ -39,11 +45,26 @@ fn main() -> Result<()> {
         Commands::Session { command } => match command {
             SessionCommand::List => {
                 let sessions = list_review_sessions()?;
-                print_sessions(&sessions);
+                let session_paths: Vec<std::path::PathBuf> =
+                    sessions.into_iter().map(std::path::PathBuf::from).collect();
+                print_sessions(&session_paths);
                 Ok(())
             }
 
             SessionCommand::Resume { review_name, ai } => {
+                let review_name = match review_name {
+                    Some(name) => name,
+                    None => {
+                        print_startup_banner();
+                        select_review_session()?
+                    }
+                };
+
+                if review_name.is_empty() {
+                    println!("\n👋 {GREEN_BOLD}Session selection cancelled.{RESET}");
+                    return Ok(());
+                }
+
                 let artifact_dir = existing_review_artifact_dir(&review_name)?;
                 resume_interactive_session(&artifact_dir, &ai)?;
                 Ok(())

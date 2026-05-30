@@ -53,8 +53,8 @@ pub enum SessionCommand {
 
     /// Resume an existing interactive review session
     Resume {
-        /// Existing review name, e.g. codecommit-pr-4663 or commit-abc123
-        review_name: String,
+        /// Existing review name. If omitted, an interactive picker is shown.
+        review_name: Option<String>,
 
         /// AI tool used for the interactive session
         #[arg(long, value_name = "TOOL")]

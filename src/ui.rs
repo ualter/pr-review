@@ -1,4 +1,10 @@
+use dialoguer::{
+    console::{Style, Term},
+    theme::ColorfulTheme,
+};
+
 use crate::cli::AiTool;
+use anyhow::Result;
 use std::{
     io::{self, Write},
     path::Path,
@@ -205,11 +211,11 @@ pub fn print_startup_banner() {
         print!("\x1b[H"); // cursor home
         println!("{GREEN_BOLD}{frame}{RESET}");
         let _ = std::io::stdout().flush();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(70));
     }
 
-    println!("{BLACK_BOLD}AI-Assisted Engineering Review CLI{RESET}");
-    println!("{LINE}");
+    print!("  {BLACK_BOLD} AI-Assisted Engineering Review CLI{RESET}\n");
+    // println!("{LINE}");
 }
 
 pub fn print_sessions(sessions: &[std::path::PathBuf]) {
@@ -231,4 +237,46 @@ pub fn print_sessions(sessions: &[std::path::PathBuf]) {
     }
 
     println!("{LINE}");
+}
+
+pub fn pick_session(sessions: Vec<String>) -> Result<String> {
+    let theme = ColorfulTheme {
+        values_style: Style::new().cyan(),
+        active_item_style: Style::new().yellow().bold(),
+        inactive_item_style: Style::new().blue().bold(),
+        // active_item_prefix: Style::new().apply_to("❯".to_string()),
+        active_item_prefix: Style::new().apply_to("  🟢".to_string()),
+        inactive_item_prefix: Style::new().apply_to("  ⚫".to_string()),
+        // checked_item_prefix: Style::new().apply_to("✓".to_string()),
+        // unchecked_item_prefix: Style::new().apply_to(" ".to_string()),
+        // picked_item_style: Style::new().green().bold(),
+        prompt_style: Style::new().blue().bold(),
+        prompt_prefix: Style::new().yellow().bold().apply_to("".to_owned()),
+        prompt_suffix: Style::new().yellow().bold().apply_to("".to_owned()),
+        ..ColorfulTheme::default()
+    };
+
+    let term = Term::stdout();
+
+    term.clear_to_end_of_screen()?;
+
+    let line = format!("-----------------------------------------------------------");
+    //
+    let index = dialoguer::Select::with_theme(&theme)
+        // let index = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .items(&sessions)
+        .default(0)
+        .with_prompt(format!(
+            "{line}\n{YELLOW_BOLD}  🧮 👉 Select a review session to resume {BLACK_BOLD}(<ESC> to cancel){YELLOW_BOLD}\n{BLUE_BOLD} {line}{RESET}"
+        ))
+        .report(false)
+        .interact_opt()?;
+
+    match index {
+        Some(i) => Ok(sessions[i].clone()),
+        None => {
+            term.clear_to_end_of_screen()?;
+            Ok("".to_string())
+        }
+    }
 }

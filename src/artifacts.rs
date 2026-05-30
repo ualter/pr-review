@@ -1,3 +1,4 @@
+use crate::ui;
 use crate::ui::{BLACK_BOLD, BLUE_BOLD, RESET, YELLOW, YELLOW_BOLD};
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
@@ -181,7 +182,7 @@ pub fn existing_review_artifact_dir(review_name: &str) -> Result<PathBuf> {
     Ok(dir)
 }
 
-pub fn list_review_sessions() -> Result<Vec<PathBuf>> {
+pub fn list_review_sessions() -> Result<Vec<String>> {
     let reports_dir = reports_archive_dir()?;
 
     if !reports_dir.exists() {
@@ -199,9 +200,26 @@ pub fn list_review_sessions() -> Result<Vec<PathBuf>> {
         .map(|entry| entry.path())
         .filter(|path| path.is_dir())
         .filter(|path| path.join("conversation.md").exists())
+        .filter_map(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.to_string())
+        })
         .collect::<Vec<_>>();
 
     sessions.sort();
 
     Ok(sessions)
+}
+
+pub fn select_review_session() -> Result<String> {
+    let sessions = list_review_sessions()?;
+
+    if sessions.is_empty() {
+        return Err(anyhow!(
+            "No resumable sessions found in ~/.pr-review/reports"
+        ));
+    }
+
+    ui::pick_session(sessions)
 }
