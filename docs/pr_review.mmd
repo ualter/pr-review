@@ -1,0 +1,52 @@
+```mermaid
+sequenceDiagram
+    actor Dev as Developer
+    participant CLI as pr-review CLI
+    participant Git as Git/AWS
+    participant Art as Artifact Store<br/>~/.pr-review/reports/...
+    participant AI as AI Tool<br/>Copilot/Codex
+    participant Session as session.rs
+
+    Dev->>CLI: pr-review pr 4663 --ai codex --interactive
+
+    CLI->>Git: Fetch PR metadata + branches
+    Git-->>CLI: source, target, repo metadata
+
+    CLI->>Git: Generate diff
+    Git-->>CLI: full diff
+
+    CLI->>CLI: Build initial review prompt<br/>full prompt + full diff
+    CLI->>AI: Run initial review
+    AI-->>CLI: review result
+
+    CLI->>Art: Save diff, prompt, review.md, meta.json
+
+    CLI->>Session: prepare_session_artifacts()
+    Session->>Art: Split diff into diff-by-file/*.patch
+    Session->>AI: Summarize review.md
+    AI-->>Session: compact review summary
+    Session->>Art: Save review-summary.md
+
+    CLI->>Session: run_interactive_session()
+
+    loop User asks follow-up questions
+        Dev->>Session: Ask question
+        Session->>Art: Read review-summary.md
+        Session->>Art: Read conversation-summary.md
+        Session->>Art: Select relevant diff-by-file/*.patch
+        Session->>AI: Small chat prompt<br/>summary + selected diff + question
+        AI-->>Session: answer
+        Session->>Art: Append to conversation.md
+        Session->>AI: Update compact conversation summary
+        AI-->>Session: updated summary
+        Session->>Art: Save conversation-summary.md
+        Session-->>Dev: Show answer
+    end
+
+    alt User types /full
+        Session->>AI: Send full diff once
+    end
+
+    Dev->>Session: /exit
+    Session-->>Dev: Conversation saved
+```

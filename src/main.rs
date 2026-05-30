@@ -106,12 +106,11 @@ fn main() -> Result<()> {
             tool,
         );
 
+        // Create diff by file and summarized review for interactive session
+        session::prepare_session_artifacts(&artifact_dir, &input, &review, tool)?;
+
         if common.interactive {
-            if let Some(tool) = &common.ai {
-                session::run_interactive_session(&input, &artifact_dir, tool, &review)?;
-            } else {
-                eprintln!("--interactive requires --ai <copilot|codex>");
-            }
+            session::run_interactive_session(&input, &artifact_dir, tool)?;
         }
     }
 
