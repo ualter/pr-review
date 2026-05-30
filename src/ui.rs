@@ -4,6 +4,7 @@ use dialoguer::{
 };
 
 use crate::cli::AiTool;
+use crate::config::{user_config, PromptStyle};
 use anyhow::Result;
 use std::{
     io::{self, Write},
@@ -176,11 +177,17 @@ pub fn start_spinner(icon: &str, message: impl Into<String>) -> SpinnerHandle {
 pub fn render_interactive_prompt(tool: &AiTool) -> String {
     let tool_name = tool.display_name().to_lowercase();
 
-    format!(
-        "{FG_DARK_BG}░▒▓{BG_DARK}{FG_WHITE_BOLD}{} {} {BG_GREEN}{FG_DARK_BG}{FG_WHITE_BOLD} pr-review {BG_BLACK}{FG_GREEN_BG}{RESET} ",
-        tool.status_icon(),
-        tool_name,
-    )
+    match user_config().prompt_style {
+        PromptStyle::Simple => format!(
+            "{BLUE_BOLD}{} pr-review>{RESET} ",
+            tool.status_icon(),
+        ),
+        PromptStyle::Fancy => format!(
+            "{FG_DARK_BG}░▒▓{BG_DARK}{FG_WHITE_BOLD}{} {} {BG_GREEN}{FG_DARK_BG}{FG_WHITE_BOLD} pr-review {BG_BLACK}{FG_GREEN_BG}{RESET} ",
+            tool.status_icon(),
+            tool_name,
+        ),
+    }
 }
 
 pub fn print_interactive_help(tool: &AiTool) {

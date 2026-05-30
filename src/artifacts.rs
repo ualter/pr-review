@@ -138,6 +138,16 @@ pub fn load_review_meta(artifact_dir: &Path) -> Result<LoadedReviewMeta> {
             target
         ),
     };
+    let warning = match inferred_kind {
+        "commit" if inferred_sha.is_none() => Some(
+            "Using legacy session metadata; commit identity was inferred incompletely."
+                .to_string(),
+        ),
+        "pr" if inferred_pr_id.is_none() => Some(
+            "Using legacy session metadata; PR identity was inferred incompletely.".to_string(),
+        ),
+        _ => None,
+    };
 
     Ok(LoadedReviewMeta {
         meta: ReviewMeta {
@@ -164,10 +174,7 @@ pub fn load_review_meta(artifact_dir: &Path) -> Result<LoadedReviewMeta> {
             pr_id: inferred_pr_id,
             sha: inferred_sha,
         },
-        warning: Some(
-            "Session was created by an older pr-review version. Resume will use inferred metadata; create a new session to persist full context."
-                .to_string(),
-        ),
+        warning,
     })
 }
 
@@ -614,7 +621,7 @@ mod tests {
     }
 
     #[test]
-    fn loads_legacy_review_meta_with_warning() {
+    fn loads_legacy_review_meta_without_warning_when_identity_is_clear() {
         let temp_dir = tempfile::tempdir().unwrap();
         let artifact_dir = temp_dir.path().join("commit-deadbeef");
         fs::create_dir_all(&artifact_dir).unwrap();
@@ -634,7 +641,7 @@ mod tests {
 
         let loaded = load_review_meta(&artifact_dir).unwrap();
 
-        assert!(loaded.warning.is_some());
+        assert!(loaded.warning.is_none());
         assert_eq!(loaded.meta.schema_version, 1);
         assert_eq!(loaded.meta.review_kind, "commit");
         assert_eq!(loaded.meta.sha.as_deref(), Some("deadbeef"));

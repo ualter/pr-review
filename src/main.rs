@@ -1,5 +1,6 @@
 mod artifacts;
 mod cli;
+mod config;
 mod doctor;
 mod markdown_viewer;
 mod review;
@@ -18,7 +19,8 @@ use std::{
 use artifacts::{
     existing_review_artifact_dir, review_artifact_dir, run_ai_tool_streaming, write_review_meta,
 };
-use cli::{Cli, Commands, CommonArgs, ReviewInput};
+use cli::{Cli, Commands, CommonArgs, ConfigCommand, ReviewInput};
+use config::{init_user_config, load_user_config, set_user_config};
 use review::{build_prompt, review_commit, review_pr};
 use session::resume_interactive_session;
 use ui::{
@@ -36,12 +38,34 @@ const TESTING: bool = false;
 fn main() -> Result<()> {
     let start = Instant::now();
     let cli = Cli::parse();
+    let config = load_user_config()?;
+    set_user_config(config.clone());
 
     match cli.command {
         Commands::Banner => {
             ui::print_startup_banner();
             Ok(())
         }
+
+        Commands::Config { command } => match command {
+            ConfigCommand::Init => {
+                let (path, created) = init_user_config()?;
+
+                if created {
+                    println!(
+                        "{GREEN_BOLD}Created config file:{RESET} {}",
+                        path.display()
+                    );
+                } else {
+                    println!(
+                        "{YELLOW}Config file already exists:{RESET} {}",
+                        path.display()
+                    );
+                }
+
+                Ok(())
+            }
+        },
 
         Commands::Doctor => {
             doctor::run_doctor(std::path::Path::new("."))?;
@@ -71,6 +95,12 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
 
+                let ai = ai.or_else(|| config.default_ai.clone()).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No AI tool specified. Use `--ai <tool>` or set `default_ai = \"codex\"` in ~/.pr-review/config.toml."
+                    )
+                })?;
+
                 let artifact_dir = existing_review_artifact_dir(&review_name)?;
                 resume_interactive_session(&artifact_dir, &ai)?;
                 Ok(())
@@ -78,17 +108,27 @@ fn main() -> Result<()> {
         },
 
         Commands::Pr { pr_id, common } => {
+            let common = apply_default_ai(common, &config);
             let input = review_pr(&pr_id, &common)?;
 
             run_review_flow(input, common, start)
         }
 
         Commands::Commit { sha, common } => {
+            let common = apply_default_ai(common, &config);
             let input = review_commit(&sha, &common)?;
 
             run_review_flow(input, common, start)
         }
     }
+}
+
+fn apply_default_ai(mut common: CommonArgs, config: &config::AppConfig) -> CommonArgs {
+    if common.ai.is_none() {
+        common.ai = config.default_ai.clone();
+    }
+
+    common
 }
 
 fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Result<()> {

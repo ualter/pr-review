@@ -1,5 +1,7 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
+use crate::config::user_config;
 
 #[derive(Parser)]
 #[command(name = "pr-review")]
@@ -19,6 +21,12 @@ pub struct SessionArgs {
 pub enum Commands {
     /// Display the startup banner
     Banner,
+
+    /// Manage user configuration
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
 
     /// Check local environment and external CLI dependencies
     Doctor,
@@ -47,6 +55,12 @@ pub enum Commands {
 }
 
 #[derive(Subcommand)]
+pub enum ConfigCommand {
+    /// Create ~/.pr-review/config.toml if it does not exist
+    Init,
+}
+
+#[derive(Subcommand)]
 pub enum SessionCommand {
     /// List existing review sessions
     List,
@@ -58,7 +72,7 @@ pub enum SessionCommand {
 
         /// AI tool used for the interactive session
         #[arg(long, value_name = "TOOL")]
-        ai: AiTool,
+        ai: Option<AiTool>,
     },
 }
 
@@ -98,10 +112,16 @@ impl AiTool {
         }
     }
 
-    pub fn status_icon(&self) -> &'static str {
+    pub fn status_icon(&self) -> &str {
         match self {
-            AiTool::Copilot => "🧑‍✈️",
-            AiTool::Codex => "🤖",
+            AiTool::Copilot => user_config()
+                .copilot_icon
+                .as_deref()
+                .unwrap_or("🧑‍✈️"),
+            AiTool::Codex => user_config()
+                .codex_icon
+                .as_deref()
+                .unwrap_or("🤖"),
         }
     }
 
@@ -109,6 +129,16 @@ impl AiTool {
         match self {
             AiTool::Copilot => format!("copilot -p \"$(cat {})\"", prompt_path.display()),
             AiTool::Codex => format!("codex review - < {}", prompt_path.display()),
+        }
+    }
+
+    pub fn from_config_value(value: &str) -> Result<Self> {
+        match value.trim().to_lowercase().as_str() {
+            "copilot" => Ok(AiTool::Copilot),
+            "codex" => Ok(AiTool::Codex),
+            other => Err(anyhow!(
+                "Invalid AI tool `{other}` in config. Expected `copilot` or `codex`."
+            )),
         }
     }
 }

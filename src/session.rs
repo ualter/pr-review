@@ -101,22 +101,12 @@ pub fn run_interactive_session(
     );
 
     println!("{BLACK_BOLD}Commands:{RESET}");
-    println!(
-        "  {YELLOW}/help{RESET}  {YELLOW}/exit{RESET}  {YELLOW}/full{RESET}"
-    );
+    println!("  {YELLOW}/help{RESET}  {YELLOW}/exit{RESET}  {YELLOW}/full{RESET}");
     println!("{BLACK_BOLD}Views:{RESET}");
-    println!(
-        "  {YELLOW}/summary{RESET}  {YELLOW}/summary-print{RESET}"
-    );
-    println!(
-        "  {YELLOW}/review{RESET}  {YELLOW}/review-print{RESET}"
-    );
-    println!(
-        "  {YELLOW}/review-summary{RESET}  {YELLOW}/review-summary-print{RESET}"
-    );
-    println!(
-        "  {YELLOW}/last [N]{RESET}  {YELLOW}/last-print [N]{RESET}"
-    );
+    println!("  {YELLOW}/summary{RESET}           {YELLOW}/summary-print{RESET}");
+    println!("  {YELLOW}/review{RESET}            {YELLOW}/review-print{RESET}");
+    println!("  {YELLOW}/review-summary{RESET}    {YELLOW}/review-summary-print{RESET}");
+    println!("  {YELLOW}/last [N]{RESET}          {YELLOW}/last-print [N]{RESET}");
 
     println!(
     "{BLACK_BOLD}Tip:{RESET} Ask follow-up questions naturally — only use {YELLOW}/full{RESET} when the AI needs the complete diff context again."
@@ -155,7 +145,8 @@ pub fn run_interactive_session(
         }
 
         if let Some(last_count) = parse_last_command(user_question, "/last-print")? {
-            let conversation = load_last_conversation_markdown(&session.conversation_path, last_count)?;
+            let conversation =
+                load_last_conversation_markdown(&session.conversation_path, last_count)?;
             let title = match last_count {
                 Some(count) => format!("Last {count} Conversation Exchanges"),
                 None => "Last Conversation".to_string(),
@@ -194,27 +185,23 @@ pub fn run_interactive_session(
                 continue;
             }
             "/review-summary" => {
-                open_markdown_viewer(
-                    "🧠 Review Summary",
-                    &artifact_dir.join("review-summary.md"),
-                )?;
+                open_markdown_viewer("🧠 Review Summary", &artifact_dir.join("review-summary.md"))?;
                 continue;
             }
             "/review-summary-print" => {
-                print_markdown_document(
-                    "Review Summary",
-                    &artifact_dir.join("review-summary.md"),
-                )?;
+                print_markdown_document("Review Summary", &artifact_dir.join("review-summary.md"))?;
                 continue;
             }
 
             "/exit" | "exit" => {
                 if conversation_summary_dirty {
-                    let spinner =
-                        start_spinner(
-                            tool.status_icon(),
-                            format!("{} is updating the conversation summary...", tool.display_name()),
-                        );
+                    let spinner = start_spinner(
+                        tool.status_icon(),
+                        format!(
+                            "{} is updating the conversation summary...",
+                            tool.display_name()
+                        ),
+                    );
                     update_conversation_summary(&session, tool)?;
                     spinner.stop();
                 }
@@ -454,8 +441,8 @@ fn parse_last_command(input: &str, command: &str) -> Result<Option<Option<usize>
 }
 
 fn load_last_conversation_markdown(path: &Path, exchange_count: Option<usize>) -> Result<String> {
-    let conversation = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
+    let conversation =
+        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
 
     match exchange_count {
         None => Ok(conversation),
@@ -868,7 +855,7 @@ fn load_review_input_from_session(artifact_dir: &Path) -> Result<ReviewInput> {
 
     if let Some(warning) = &loaded_meta.warning {
         println!("{LINE}");
-        println!("{YELLOW_BOLD}⚠ Legacy session detected.{RESET}");
+        println!("{YELLOW_BOLD}⚠  Legacy session detected.{RESET}");
         println!("{BLACK_BOLD}{warning}{RESET}");
         println!("{LINE}");
     }
