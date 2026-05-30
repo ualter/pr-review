@@ -13,6 +13,9 @@ help:  ## Display this help
 build:  ## Build the project
 	cargo build --release
 
+banner:  ## Display the startup banner
+	cargo run --release banner
+
 doctor:  ## Check local environment and external CLI dependencies
 	cargo run --release doctor
 

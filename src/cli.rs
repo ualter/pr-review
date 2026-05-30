@@ -17,6 +17,9 @@ pub struct SessionArgs {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Display the startup banner
+    Banner,
+
     /// Check local environment and external CLI dependencies
     Doctor,
 

@@ -176,3 +176,65 @@ pub fn print_interactive_help(tool: &AiTool) {
     );
     println!("{LINE}");
 }
+
+pub fn print_startup_banner() {
+    let frames = [
+        r#"
+  PR-REVIEW
+"#,
+        r#"
+ ✨PR-REVIEW
+"#,
+        r#"
+  P✨R-REVIEW
+"#,
+        r#"
+  PR✨-REVIEW
+"#,
+        r#"
+  PR✨-REVIEW
+"#,
+        r#"
+  PR-✨REVIEW
+"#,
+        r#"
+  PR-R✨EVIEW
+"#,
+        r#"
+  PR-RE✨VIEW
+"#,
+        r#"
+  PR-REV✨IEW
+"#,
+        r#"
+  PR-REVI✨EW
+"#,
+        r#"
+  PR-REVIE✨W
+"#,
+        r#"
+  PR-REVIEW✨
+"#,
+        r#"
+  PR-REVIEW ✨
+"#,
+        r#"
+  👉PR-REVIEW ✨
+"#,
+        r#"
+   👉PR-REVIEW✨
+"#,
+        r#"
+   👉 PR-REVIEW✨
+"#,
+        r#"
+   👉 PR-REVIEW ✨
+"#,
+    ];
+
+    for frame in frames {
+        print!("\x1b[2J\x1b[H"); // clear screen + move cursor home
+        println!("{GREEN_BOLD}{frame}{RESET}");
+        std::thread::sleep(std::time::Duration::from_millis(120));
+    }
+}

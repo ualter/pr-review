@@ -24,6 +24,11 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Banner => {
+            ui::print_startup_banner();
+            Ok(())
+        }
+
         Commands::Doctor => {
             doctor::run_doctor(std::path::Path::new("."))?;
             Ok(())
