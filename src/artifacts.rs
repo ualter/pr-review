@@ -6,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use tempfile;
 
 use crate::cli::{AiTool, ReviewInput};
 
@@ -31,6 +32,8 @@ pub fn write_review_meta(
         .with_context(|| format!("Failed to write meta file: {}", meta_path.display()))
 }
 
+const MAX_COPILOT_PROMPT_BYTES: usize = 129_000;
+
 // - copilot takes the prompt as a CLI argument: copilot -p "...prompt..." → run_command is enough
 // - codex review - the - flag means "read from stdin" → needs run_command_with_stdin to pipe the prompt in
 //
@@ -43,8 +46,27 @@ pub fn write_review_meta(
 
 pub fn run_ai_tool(tool: &AiTool, prompt: &str) -> Result<String> {
     match tool {
-        AiTool::Copilot => run_command(Path::new("."), "copilot", &["-p", prompt]),
-        // `codex review -` reads the prompt from stdin, running fully non-interactively
+        AiTool::Copilot => {
+            if prompt.len() > MAX_COPILOT_PROMPT_BYTES {
+                eprintln!(
+                    "[pr-review] Warning: The prompt is very large ({} bytes). For big PRs, consider using 'codex' instead of 'copilot' for better results.",
+                    prompt.len()
+                );
+
+                let prompt_file = tempfile::NamedTempFile::new()?;
+                std::fs::write(prompt_file.path(), prompt)?;
+
+                let small_prompt = format!(
+                    "Read and follow the complete PR review prompt in this file:\n\n{}\n\nTreat that file as the full instructions and source of truth.",
+                    prompt_file.path().display()
+                );
+
+                run_command(Path::new("."), "copilot", &["-p", &small_prompt])
+            } else {
+                run_command(Path::new("."), "copilot", &["-p", prompt])
+            }
+        }
+
         AiTool::Codex => run_command_with_stdin(Path::new("."), "codex", &["review", "-"], prompt),
     }
 }
