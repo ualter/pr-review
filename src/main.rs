@@ -1,6 +1,7 @@
 mod artifacts;
 mod cli;
 mod doctor;
+mod markdown_viewer;
 mod review;
 mod session;
 mod ui;

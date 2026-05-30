@@ -9,6 +9,7 @@ use std::{
 use crate::{
     artifacts::run_ai_tool,
     cli::{AiTool, ReviewInput},
+    markdown_viewer::open_markdown_viewer,
     ui::{
         print_interactive_help, start_spinner, BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET,
         YELLOW, YELLOW_BOLD,
@@ -90,17 +91,24 @@ pub fn run_interactive_session(
 ) -> Result<()> {
     let session = ReviewSession::new(artifact_dir)?;
 
-    println!("{LINE}");
     println!(
-        "{}Interactive review session started with {}{}",
-        GREEN_BOLD,
-        tool.display_name(),
-        RESET
+        "{GREEN_BOLD}Interactive review session started with {}{RESET}",
+        tool.display_name()
     );
+
     println!(
-        "{}Type /exit to leave. Type /full to force full diff context once.{}",
-        YELLOW_BOLD, RESET
+        "{BLACK_BOLD}Commands:{RESET} \
+{YELLOW}/help{RESET} • \
+{YELLOW}/summary{RESET} • \
+{YELLOW}/review{RESET} • \
+{YELLOW}/last{RESET} • \
+{YELLOW}/full{RESET} • \
+{YELLOW}/exit{RESET}"
     );
+
+    println!(
+    "{BLACK_BOLD}Tip:{RESET} Ask follow-up questions naturally — only use {YELLOW}/full{RESET} when the AI needs the complete diff context again."
+);
     println!("{LINE}");
 
     loop {
@@ -121,7 +129,29 @@ pub fn run_interactive_session(
                 print_interactive_help(tool);
                 continue;
             }
-            "/exit" => {
+
+            "/summary" => {
+                open_markdown_viewer(
+                    "📋 Conversation Summary",
+                    &artifact_dir.join("conversation-summary.md"),
+                )?;
+                continue;
+            }
+
+            "/review" => {
+                open_markdown_viewer("🧠 Review Summary", &artifact_dir.join("review.md"))?;
+                continue;
+            }
+
+            "/last" => {
+                open_markdown_viewer(
+                    "💬 Last Conversation",
+                    &artifact_dir.join("conversation.md"),
+                )?;
+                continue;
+            }
+
+            "/exit" | "exit" => {
                 println!("{LINE}");
                 println!(
                     "{}Conversation saved to:{} {}",
@@ -132,6 +162,7 @@ pub fn run_interactive_session(
                 println!("{LINE}");
                 break;
             }
+
             "/quit" => {
                 println!("Use /exit to leave the session.");
                 continue;

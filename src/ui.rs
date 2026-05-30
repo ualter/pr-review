@@ -167,19 +167,27 @@ pub fn start_spinner(message: impl Into<String>) -> SpinnerHandle {
 
 pub fn print_interactive_help(tool: &AiTool) {
     println!("{LINE}");
-    println!(
-        "{YELLOW_BOLD}Interactive session - {BLUE_BOLD}{}{RESET}",
-        tool.display_name()
-    );
     println!();
-    println!("{GREEN_BOLD}Commands:{RESET}");
-    println!("  {YELLOW}/help{RESET}   {BLACK_BOLD}Show this help{RESET}");
-    println!("  {YELLOW}/exit{RESET}   {BLACK_BOLD}Exit interactive session{RESET}");
-    println!();
+    println!("{GREEN_BOLD}Available Commands:{RESET}");
     println!(
-        "Anything else is sent to {BLUE_BOLD}{}{RESET}.",
-        tool.display_name()
+        "  {YELLOW}❓ /help{RESET}      {BLACK_BOLD}Show available commands and shortcuts{RESET}"
     );
+    println!(
+    "  {YELLOW}📋 /summary{RESET}   {BLACK_BOLD}Show the AI-generated conversation summary{RESET}"
+);
+    println!(
+    "  {YELLOW}🧠 /review{RESET}    {BLACK_BOLD}Show the original PR/commit review results{RESET}"
+);
+    println!(
+    "  {YELLOW}💬 /last{RESET}      {BLACK_BOLD}Show the latest interactive conversation{RESET}"
+);
+    println!(
+        "  {YELLOW}🔄 /full{RESET}      {BLACK_BOLD}Restart the review session from scratch{RESET}"
+    );
+    println!("  {YELLOW}🚪 /exit{RESET}      {BLACK_BOLD}Save the session and exit{RESET}");
+    println!();
+
+    println!("{BLACK_BOLD}Anything else will be sent directly to the AI assistant {BLACK_BOLD}({}).{RESET}", tool.display_name());
     println!("{LINE}");
 }
 
