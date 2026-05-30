@@ -424,6 +424,10 @@ fn parse_last_command(input: &str, command: &str) -> Result<Option<Option<usize>
         return Ok(None);
     };
 
+    if rest.starts_with('-') {
+        return Ok(None);
+    }
+
     let rest = rest.trim();
     if rest.is_empty() {
         return Ok(Some(None));
