@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use std::{
     collections::HashMap,
     fs::{self, OpenOptions},
@@ -10,7 +10,8 @@ use crate::{
     artifacts::run_ai_tool,
     cli::{AiTool, ReviewInput},
     ui::{
-        print_interactive_help, BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW, YELLOW_BOLD,
+        print_interactive_help, start_spinner, BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET,
+        YELLOW, YELLOW_BOLD,
     },
 };
 
@@ -160,7 +161,9 @@ fn process_user_question(
     session.append_user_message(actual_question)?;
     let context = select_context_for_question(session, input, actual_question, force_full_diff)?;
     let prompt = build_chat_prompt(input, actual_question, &context);
+    let spinner = start_spinner(format!("{} is thinking...", tool.display_name()));
     let answer = run_ai_tool(tool, &prompt)?;
+    spinner.stop();
     println!("\n{}\n", answer);
     session.append_ai_message(&answer)?;
     update_conversation_summary(session, tool)?;

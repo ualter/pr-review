@@ -30,6 +30,21 @@ pub fn print_header(repository: &str, source: &str, target: &str, review_branch:
     println!("{LINE}");
 }
 
+pub struct SpinnerHandle {
+    stop: Arc<AtomicBool>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl SpinnerHandle {
+    pub fn stop(mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 pub fn print_artifacts(
     diff_path: &Path,
     prompt_path: &Path,
@@ -109,7 +124,9 @@ pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration,
     println!("{LINE}");
 }
 
-pub fn start_spinner(message: &'static str) -> (Arc<AtomicBool>, thread::JoinHandle<()>) {
+pub fn start_spinner(message: impl Into<String>) -> SpinnerHandle {
+    let message = message.into();
+
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = Arc::clone(&stop);
 
@@ -126,15 +143,19 @@ pub fn start_spinner(message: &'static str) -> (Arc<AtomicBool>, thread::JoinHan
                 RESET
             );
             let _ = io::stdout().flush();
+
             i += 1;
             thread::sleep(Duration::from_millis(100));
         }
 
-        print!("\r{}\r", " ".repeat(100));
+        print!("\r{}\r", " ".repeat(120));
         let _ = io::stdout().flush();
     });
 
-    (stop, handle)
+    SpinnerHandle {
+        stop,
+        handle: Some(handle),
+    }
 }
 
 pub fn print_interactive_help(tool: &AiTool) {

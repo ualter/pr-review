@@ -6,7 +6,7 @@ mod ui;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::{fs, path::PathBuf, sync::atomic::Ordering, time::Instant};
+use std::{fs, path::PathBuf, time::Instant};
 
 use artifacts::{
     existing_review_artifact_dir, review_artifact_dir, run_ai_tool, write_review_meta,
@@ -97,12 +97,11 @@ fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Re
         let spinner_msg: &'static str =
             Box::leak(format!("{} is reviewing...", tool.display_name()).into_boxed_str());
 
-        let (stop, handle) = start_spinner(spinner_msg);
+        let spinner_handler = start_spinner(spinner_msg);
 
         let result = run_ai_tool(tool, &prompt_arg);
 
-        stop.store(true, Ordering::Relaxed);
-        handle.join().ok();
+        spinner_handler.stop();
 
         let review = result?;
 
