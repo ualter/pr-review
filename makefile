@@ -13,11 +13,11 @@ help:  ## Display this help
 build:  ## Build the project
 	cargo build --release
 
-review-pr: ## Review a CodeCommit Pull Request with GitHub Copilot CLI
-	cargo run --release pr 4663 --run-copilot --repo-path $(repo_path)
+review-pr: ## Review a CodeCommit Pull Request  (usage: make review-pr AI=copilot|codex)
+	cargo run --release pr 4663 --ai $(AI) --repo-path $(repo_path)
 
-review-commit: ## Review a CodeCommit Commit with GitHub Copilot CLI
-	cargo run --release commit 5ceeb10f2c37a9d85d6ce26ba31d0f080e352603 --run-copilot --repo-path $(repo_path)
+review-commit: ## Review a CodeCommit Commit  (usage: make review-commit AI=copilot|codex)
+	cargo run --release commit 5ceeb10f2c37a9d85d6ce26ba31d0f080e352603 --ai $(AI) --repo-path $(repo_path)
 
 distr-local: build  ## Build the project and prepare a local distribution
 	cargo build --release

@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -38,9 +38,39 @@ pub struct CommonArgs {
     #[arg(long, default_value = ".")]
     pub repo_path: PathBuf,
 
-    /// Execute Copilot after generating prompt
-    #[arg(long)]
-    pub run_copilot: bool,
+    /// AI tool to run after generating the prompt (omit to only generate artifacts)
+    #[arg(long, value_name = "TOOL")]
+    pub ai: Option<AiTool>,
+}
+
+#[derive(Clone, ValueEnum, Debug)]
+pub enum AiTool {
+    /// GitHub Copilot CLI (`copilot -p`)
+    Copilot,
+    /// OpenAI Codex CLI (`codex`)
+    Codex,
+}
+
+impl AiTool {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            AiTool::Copilot => "Copilot",
+            AiTool::Codex => "Codex",
+        }
+    }
+
+    pub fn manual_hint(&self, prompt_path: &std::path::Path) -> String {
+        match self {
+            AiTool::Copilot => format!(
+                "copilot -p \"$(cat {})\"",
+                prompt_path.display()
+            ),
+            AiTool::Codex => format!(
+                "codex review - < {}",
+                prompt_path.display()
+            ),
+        }
+    }
 }
 
 pub struct ReviewInput {

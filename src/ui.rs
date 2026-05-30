@@ -1,3 +1,4 @@
+use crate::cli::AiTool;
 use std::{
     io::{self, Write},
     path::Path,
@@ -35,7 +36,7 @@ pub fn print_artifacts(
     artifact_dir: &Path,
     archived_diff_path: &Path,
     archived_prompt_path: &Path,
-    run_copilot: bool,
+    ai: &Option<AiTool>,
 ) {
     println!(
         "{}Diff written to:   {}{}",
@@ -69,20 +70,24 @@ pub fn print_artifacts(
         RESET
     );
     println!("{LINE}");
-    if !run_copilot {
-        println!("{BLACK_BOLD}Run Copilot manually with:{RESET}");
-        println!(
-            "  {BLACK_BOLD}copilot -p \"$(cat {})\"{RESET}",
-            prompt_path.display()
-        );
+    if ai.is_none() {
+        println!("{BLACK_BOLD}Run manually with one of:{RESET}");
+        for tool in &[AiTool::Copilot, AiTool::Codex] {
+            println!(
+                "  {BLACK_BOLD}[{}]  {}{RESET}",
+                tool.display_name(),
+                tool.manual_hint(prompt_path)
+            );
+        }
         println!("{LINE}");
     }
 }
 
-pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration) {
+pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration, tool: &AiTool) {
     println!(
-        "{}Copilot review completed in {:.1}s{}",
+        "{}{} review completed in {:.1}s{}",
         GREEN_BOLD,
+        tool.display_name(),
         elapsed.as_secs_f64(),
         RESET
     );

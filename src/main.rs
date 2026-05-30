@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::{fs, path::PathBuf, sync::atomic::Ordering, time::Instant};
 
-use artifacts::{review_artifact_dir, run_command};
+use artifacts::{review_artifact_dir, run_ai_tool};
 use cli::{Cli, Commands};
 use review::{build_prompt, review_commit, review_pr};
 use ui::{print_artifacts, print_header, print_report, start_spinner, GREEN, RESET, YELLOW};
@@ -34,7 +34,7 @@ fn main() -> Result<()> {
     let prompt = build_prompt(&input);
     let tmp_dir = std::env::temp_dir();
     let diff_path = tmp_dir.join(format!("{}-diff.patch", input.artifact_prefix));
-    let prompt_path = tmp_dir.join(format!("{}-copilot-prompt.txt", input.artifact_prefix));
+    let prompt_path = tmp_dir.join(format!("{}-prompt.txt", input.artifact_prefix));
     let report_path = PathBuf::from(format!("{}-review.md", input.artifact_prefix));
     let artifact_dir = review_artifact_dir(&input.artifact_prefix)?;
 
@@ -54,13 +54,13 @@ fn main() -> Result<()> {
         &artifact_dir,
         &archived_diff_path,
         &archived_prompt_path,
-        common.run_copilot,
+        &common.ai,
     );
 
-    if common.run_copilot {
-        println!("{YELLOW}Sending prompt to Copilot...{RESET}");
+    if let Some(tool) = &common.ai {
+        println!("{YELLOW}Sending prompt to {}...{RESET}", tool.display_name());
 
-        let copilot_start = Instant::now();
+        let ai_start = Instant::now();
 
         let prompt_arg = fs::read_to_string(&prompt_path)?;
         let prompt_arg = if TESTING {
@@ -69,9 +69,12 @@ fn main() -> Result<()> {
             prompt_arg
         };
 
-        let (stop, handle) = start_spinner("Copilot is reviewing...");
+        let spinner_msg: &'static str = Box::leak(
+            format!("{} is reviewing...", tool.display_name()).into_boxed_str()
+        );
+        let (stop, handle) = start_spinner(spinner_msg);
 
-        let result = run_command(std::path::Path::new("."), "copilot", &["-p", &prompt_arg]);
+        let result = run_ai_tool(tool, &prompt_arg);
 
         stop.store(true, Ordering::Relaxed);
         handle.join().ok();
@@ -91,7 +94,7 @@ fn main() -> Result<()> {
             )
         })?;
 
-        print_report(&report_path, &archived_report_path, copilot_start.elapsed());
+        print_report(&report_path, &archived_report_path, ai_start.elapsed(), tool);
     }
 
     println!(
