@@ -23,6 +23,7 @@ use artifacts::{
 use cli::{Cli, Commands, CommonArgs, ConfigCommand, ReviewInput};
 use config::{init_user_config, load_user_config, set_user_config};
 use review::{build_prompt, review_commit, review_pr};
+use scm::ScmKind;
 use session::resume_interactive_session;
 use ui::{
     print_artifacts, print_header, print_report, start_spinner, GREEN, GREEN_BOLD, RESET, YELLOW,
@@ -108,9 +109,12 @@ fn main() -> Result<()> {
             }
         },
 
-        Commands::Pr { pr_id, common } => {
+        Commands::Pr { pr_id, scm, common } => {
             let common = apply_default_ai(common, &config);
-            let input = review_pr(&pr_id, &common)?;
+            let scm = scm
+                .or(config.default_scm)
+                .unwrap_or(ScmKind::CodeCommit);
+            let input = review_pr(&pr_id, scm, &common)?;
 
             run_review_flow(input, common, start)
         }

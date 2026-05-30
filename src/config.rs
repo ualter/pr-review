@@ -6,12 +6,14 @@ use std::{
 };
 
 use crate::cli::AiTool;
+use crate::scm::ScmKind;
 
 static USER_CONFIG: OnceLock<AppConfig> = OnceLock::new();
 
 #[derive(Clone, Default)]
 pub struct AppConfig {
     pub default_ai: Option<AiTool>,
+    pub default_scm: Option<ScmKind>,
     pub copilot_icon: Option<String>,
     pub codex_icon: Option<String>,
     pub prompt_style: PromptStyle,
@@ -36,6 +38,7 @@ pub fn load_user_config() -> Result<AppConfig> {
 
     let mut config = AppConfig::default();
     let mut in_ai_section = false;
+    let mut in_scm_section = false;
 
     for line in raw.lines() {
         let line = line.trim();
@@ -47,6 +50,7 @@ pub fn load_user_config() -> Result<AppConfig> {
         if line.starts_with('[') && line.ends_with(']') {
             let section = line.trim_start_matches('[').trim_end_matches(']').trim();
             in_ai_section = section == "ai";
+            in_scm_section = section == "scm";
             continue;
         }
 
@@ -57,13 +61,21 @@ pub fn load_user_config() -> Result<AppConfig> {
         let key = key.trim();
         let value = value.trim().trim_matches('"').trim_matches('\'');
 
-        if !in_ai_section && key != "default_ai" && key != "default_tool" {
+        if !in_ai_section
+            && !in_scm_section
+            && key != "default_ai"
+            && key != "default_tool"
+            && key != "default_scm"
+        {
             continue;
         }
 
         match key {
             "default_ai" | "default_tool" => {
                 config.default_ai = Some(AiTool::from_config_value(value)?);
+            }
+            "default" | "default_scm" if in_scm_section => {
+                config.default_scm = Some(ScmKind::from_config_value(value)?);
             }
             "copilot_icon" if in_ai_section => {
                 config.copilot_icon = Some(value.to_string());
@@ -122,6 +134,10 @@ default_ai = "codex"
 prompt_style = "fancy"
 copilot_icon = "🧑‍✈️"
 codex_icon = "🤖"
+
+[scm]
+# valid values: "codecommit" or "bitbucket"
+default = "codecommit"
 "#
 }
 

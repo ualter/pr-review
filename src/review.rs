@@ -2,17 +2,21 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::artifacts::{repo_name, run_command};
 use crate::cli::{CommonArgs, ReviewInput};
+use crate::scm::bitbucket::BitbucketProvider;
 use crate::scm::codecommit::CodeCommitProvider;
-use crate::scm::{current_scm_kind, ScmKind, ScmProvider};
+use crate::scm::{ScmKind, ScmProvider};
 use crate::ui::{
     BLACK_BOLD, BLUE, BLUE_BOLD, GREEN_BOLD, LINE, RED_BOLD, RESET, YELLOW, YELLOW_BOLD,
 };
 
-pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
+pub fn review_pr(pr_id: &str, scm_kind: ScmKind, common: &CommonArgs) -> Result<ReviewInput> {
     println!("\n{LINE}");
     println!("{YELLOW}Validating PR ID {BLUE_BOLD}{pr_id}...{RESET}");
-    println!("{YELLOW}Fetching CodeCommit PR metadata...{RESET}");
-    let provider = resolve_scm_provider();
+    println!(
+        "{YELLOW}Fetching {} PR metadata...{RESET}",
+        scm_kind.display_name()
+    );
+    let provider = resolve_scm_provider(scm_kind);
     let context = provider.resolve_pr_context(pr_id, common)?;
 
     println!("{YELLOW}Fetching branches...{RESET}");
@@ -27,7 +31,7 @@ pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
             "{RED_BOLD}Failed to fetch source branch{RESET} `{}` {RED_BOLD}from remote{RESET} `{}` {RED_BOLD}in{RESET} `{}`.\n\n\
 {YELLOW_BOLD}This usually means:{BLUE}\n\
 - `--repo-path` points to the wrong repository\n\
-- `--remote` is not the CodeCommit remote for this PR\n\
+- `--remote` is not the configured remote for this PR\n\
 - the source branch was deleted after the PR was opened\n\n\
 {GREEN_BOLD}Try checking:{BLUE}\n\
 - the repository path\n\
@@ -49,7 +53,7 @@ pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
             "{RED_BOLD}Failed to fetch destination branch{RESET} `{}` {RED_BOLD}from remote{RESET} `{}` {RED_BOLD}in{RESET} `{}`.\n\n\
 {YELLOW_BOLD}This usually means:{BLUE}\n\
 - `--repo-path` points to the wrong repository\n\
-- `--remote` is not the CodeCommit remote for this PR\n\
+- `--remote` is not the configured remote for this PR\n\
 - the destination branch no longer exists on that remote\n\n\
 {GREEN_BOLD}Try checking:{BLUE}\n\
 - the repository path\n\
@@ -78,7 +82,7 @@ pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
         diff,
         metadata: context.metadata,
         prompt_scope: "Review ONLY the changes contained in this PR diff file. Treat this diff as the source of truth.".to_string(),
-        artifact_prefix: format!("codecommit-pr-{pr_id}"),
+        artifact_prefix: scm_kind.artifact_prefix(pr_id),
         review_kind: "pr".to_string(),
         repository: context.repository,
         source: context.source_branch,
@@ -221,9 +225,10 @@ Diff:
     )
 }
 
-fn resolve_scm_provider() -> Box<dyn ScmProvider> {
-    match current_scm_kind() {
+fn resolve_scm_provider(kind: ScmKind) -> Box<dyn ScmProvider> {
+    match kind {
         ScmKind::CodeCommit => Box::new(CodeCommitProvider),
+        ScmKind::Bitbucket => Box::new(BitbucketProvider),
     }
 }
 

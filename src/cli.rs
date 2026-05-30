@@ -2,6 +2,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use crate::config::user_config;
+use crate::scm::ScmKind;
 
 #[derive(Parser)]
 #[command(name = "pr-review")]
@@ -34,6 +35,10 @@ pub enum Commands {
     /// Review an AWS CodeCommit Pull Request
     Pr {
         pr_id: String,
+
+        /// SCM provider used to resolve PR metadata
+        #[arg(long, value_name = "SCM")]
+        scm: Option<ScmKind>,
 
         #[command(flatten)]
         common: CommonArgs,
