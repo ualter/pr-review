@@ -551,55 +551,67 @@ fn extract_keywords(question_lower: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn resume_interactive_session(artifact_dir: &Path, ai: &AiTool) -> Result<()> {
-    if !artifact_dir.exists() {
+pub fn resume_interactive_session(artifact_dir: &Path, tool: &AiTool) -> Result<()> {
+    let conversation_path = artifact_dir.join("conversation.md");
+    let review_summary_path = artifact_dir.join("review-summary.md");
+    let conversation_summary_path = artifact_dir.join("conversation-summary.md");
+    let diff_by_file_dir = artifact_dir.join("diff-by-file");
+
+    if !conversation_path.exists() {
         return Err(anyhow!(
-            "Review artifact directory does not exist: {}",
-            artifact_dir.display()
+            "No conversation.md found. This review does not have an interactive session yet: {}",
+            conversation_path.display()
         ));
     }
 
-    let session_path = artifact_dir.join("session.json");
-
-    if !session_path.exists() {
+    if !review_summary_path.exists() {
         return Err(anyhow!(
-            "No interactive session found for this review.\nExpected: {}",
-            session_path.display()
+            "No review-summary.md found. This review is missing session artifacts: {}",
+            review_summary_path.display()
         ));
     }
 
-    match ai {
-        AiTool::Copilot => resume_copilot_session(artifact_dir),
-        AiTool::Codex => resume_codex_session(artifact_dir),
+    if !conversation_summary_path.exists() {
+        return Err(anyhow!(
+            "No conversation-summary.md found. This review is missing session artifacts: {}",
+            conversation_summary_path.display()
+        ));
     }
+
+    if !diff_by_file_dir.exists() {
+        return Err(anyhow!(
+            "No diff-by-file directory found. This review is missing split diff artifacts: {}",
+            diff_by_file_dir.display()
+        ));
+    }
+
+    println!(
+        "Resuming interactive review session from: {}",
+        artifact_dir.display()
+    );
+
+    let input = load_review_input_from_session(artifact_dir)?;
+
+    run_interactive_session(&input, artifact_dir, tool)
 }
 
-fn resume_copilot_session(artifact_dir: &Path) -> Result<()> {
-    // Use your existing Copilot interactive resume logic here.
-    //
-    // Important:
-    // - do NOT rebuild prompt
-    // - do NOT rerun review
-    // - load previous session state
-    // - continue chat
+fn load_review_input_from_session(artifact_dir: &Path) -> Result<ReviewInput> {
+    let diff = std::fs::read_to_string(artifact_dir.join("diff.patch"))?;
 
-    Err(anyhow!(
-        "Copilot interactive session resume is not implemented yet for {}",
-        artifact_dir.display()
-    ))
-}
+    let review_name = artifact_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("unknown-review")
+        .to_string();
 
-fn resume_codex_session(artifact_dir: &Path) -> Result<()> {
-    // Use your existing Codex interactive resume logic here.
-    //
-    // Important:
-    // - do NOT rebuild prompt
-    // - do NOT rerun review
-    // - load previous session state
-    // - continue chat
-
-    Err(anyhow!(
-        "Codex interactive session resume is not implemented yet for {}",
-        artifact_dir.display()
-    ))
+    Ok(ReviewInput {
+        diff,
+        metadata: format!("Resumed review session: {review_name}"),
+        prompt_scope: "Resumed interactive review session.".to_string(),
+        artifact_prefix: review_name.clone(),
+        repository: "resumed-session".to_string(),
+        source: "existing-review".to_string(),
+        target: "existing-review".to_string(),
+        review_ref: review_name,
+    })
 }
