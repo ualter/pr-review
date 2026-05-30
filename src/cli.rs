@@ -98,6 +98,13 @@ impl AiTool {
         }
     }
 
+    pub fn status_icon(&self) -> &'static str {
+        match self {
+            AiTool::Copilot => "🧑‍✈️",
+            AiTool::Codex => "🤖",
+        }
+    }
+
     pub fn manual_hint(&self, prompt_path: &std::path::Path) -> String {
         match self {
             AiTool::Copilot => format!("copilot -p \"$(cat {})\"", prompt_path.display()),

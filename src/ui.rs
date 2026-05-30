@@ -24,6 +24,12 @@ pub const YELLOW: &str = "\x1b[33m";
 pub const YELLOW_BOLD: &str = "\x1b[1;33m";
 pub const RESET: &str = "\x1b[0m";
 pub const RED_BOLD: &str = "\x1b[1;31m";
+pub const FG_WHITE_BOLD: &str = "\x1b[1;97m";
+pub const FG_DARK_BG: &str = "\x1b[38;5;236m";
+pub const BG_DARK: &str = "\x1b[48;5;236m";
+pub const FG_GREEN_BG: &str = "\x1b[38;5;34m";
+pub const BG_GREEN: &str = "\x1b[48;5;34m";
+pub const BG_BLACK: &str = "\x1b[48;5;0m";
 
 pub const LINE: &str =
     "----------------------------------------------------------------------------------------------------------------";
@@ -131,7 +137,8 @@ pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration,
     println!("{LINE}");
 }
 
-pub fn start_spinner(message: impl Into<String>) -> SpinnerHandle {
+pub fn start_spinner(icon: &str, message: impl Into<String>) -> SpinnerHandle {
+    let icon = icon.to_string();
     let message = message.into();
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -143,7 +150,8 @@ pub fn start_spinner(message: impl Into<String>) -> SpinnerHandle {
 
         while !stop_thread.load(Ordering::Relaxed) {
             print!(
-                "\r🤖 {}{} {}{}",
+                "\r{} {}{} {}{}",
+                icon,
                 YELLOW,
                 message,
                 chars[i % chars.len()],
@@ -165,36 +173,31 @@ pub fn start_spinner(message: impl Into<String>) -> SpinnerHandle {
     }
 }
 
+pub fn render_interactive_prompt(tool: &AiTool) -> String {
+    let tool_name = tool.display_name().to_lowercase();
+
+    format!(
+        "{FG_DARK_BG}░▒▓{BG_DARK}{FG_WHITE_BOLD}{} {} {BG_GREEN}{FG_DARK_BG}{FG_WHITE_BOLD} pr-review {BG_BLACK}{FG_GREEN_BG}{RESET} ",
+        tool.status_icon(),
+        tool_name,
+    )
+}
+
 pub fn print_interactive_help(tool: &AiTool) {
     let help_rows = [
-        (
-            "❓ /help",
-            "Show available commands and shortcuts",
-        ),
-        (
-            "📋 /summary",
-            "Show the AI-generated conversation summary",
-        ),
+        ("❓ /help", "Show available commands and shortcuts"),
+        ("📋 /summary", "Show the AI-generated conversation summary"),
         (
             "📋 /summary-print",
             "Print the AI-generated conversation summary",
         ),
-        (
-            "🧠 /review",
-            "Show the full PR/commit review results",
-        ),
+        ("🧠 /review", "Show the full PR/commit review results"),
         (
             "🧠 /review-print",
             "Print the full PR/commit review results",
         ),
-        (
-            "🧠 /review-summary",
-            "Show the saved review summary",
-        ),
-        (
-            "🧠 /review-summary-print",
-            "Print the saved review summary",
-        ),
+        ("🧠 /review-summary", "Show the saved review summary"),
+        ("🧠 /review-summary-print", "Print the saved review summary"),
         (
             "💬 /last",
             "Show the latest interactive conversation or `/last N` exchanges",
@@ -203,14 +206,8 @@ pub fn print_interactive_help(tool: &AiTool) {
             "💬 /last-print",
             "Print the latest interactive conversation or `/last-print N` exchanges",
         ),
-        (
-            "🔄 /full",
-            "Restart the review session from scratch",
-        ),
-        (
-            "🚪 /exit",
-            "Save the session and exit",
-        ),
+        ("🔄 /full", "Restart the review session from scratch"),
+        ("🚪 /exit", "Save the session and exit"),
     ];
 
     println!("{LINE}");
@@ -223,9 +220,7 @@ pub fn print_interactive_help(tool: &AiTool) {
         .unwrap_or(0);
     for (command, description) in help_rows {
         let padding = " ".repeat(command_width.saturating_sub(command.chars().count()));
-        println!(
-            "  {YELLOW}{command}{RESET}{padding}  {BLACK_BOLD}{description}{RESET}"
-        );
+        println!("  {YELLOW}{command}{RESET}{padding}  {BLACK_BOLD}{description}{RESET}");
     }
     println!();
 

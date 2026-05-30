@@ -14,8 +14,8 @@ use crate::{
         print_markdown_document, print_markdown_text,
     },
     ui::{
-        print_interactive_help, start_spinner, BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET,
-        YELLOW, YELLOW_BOLD,
+        print_interactive_help, render_interactive_prompt, start_spinner, BLACK_BOLD, BLUE_BOLD,
+        GREEN_BOLD, LINE, RESET, YELLOW, YELLOW_BOLD,
     },
 };
 
@@ -124,7 +124,7 @@ pub fn run_interactive_session(
     println!("{LINE}");
 
     loop {
-        print!("{}pr-review> {}", BLUE_BOLD, RESET);
+        print!("{}", render_interactive_prompt(tool));
         io::stdout().flush()?;
 
         let mut user_question = String::new();
@@ -211,7 +211,10 @@ pub fn run_interactive_session(
             "/exit" | "exit" => {
                 if conversation_summary_dirty {
                     let spinner =
-                        start_spinner(format!("{} is updating the conversation summary...", tool.display_name()));
+                        start_spinner(
+                            tool.status_icon(),
+                            format!("{} is updating the conversation summary...", tool.display_name()),
+                        );
                     update_conversation_summary(&session, tool)?;
                     spinner.stop();
                 }
@@ -256,7 +259,10 @@ fn process_user_question(
     session.append_user_message(actual_question)?;
     let context = select_context_for_question(session, input, actual_question, force_full_diff)?;
     let prompt = build_chat_prompt(input, actual_question, &context);
-    let mut spinner = Some(start_spinner(format!("{} is thinking...", tool.display_name())));
+    let mut spinner = Some(start_spinner(
+        tool.status_icon(),
+        format!("{} is thinking...", tool.display_name()),
+    ));
     let mut streamed_anything = false;
     let run_result = run_ai_tool_streaming(tool, &prompt, |chunk| {
         if let Some(active_spinner) = spinner.take() {

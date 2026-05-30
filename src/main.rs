@@ -135,10 +135,10 @@ fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Re
             prompt_arg
         };
 
-        let mut spinner_handler = Some(start_spinner(format!(
-            "{} is reviewing...",
-            tool.display_name()
-        )));
+        let mut spinner_handler = Some(start_spinner(
+            tool.status_icon(),
+            format!("{} is reviewing...", tool.display_name()),
+        ));
         let mut streamed_anything = false;
 
         let review = run_ai_tool_streaming(tool, &prompt_arg, |chunk| {
