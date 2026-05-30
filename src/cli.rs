@@ -41,6 +41,11 @@ pub struct CommonArgs {
     /// AI tool to run after generating the prompt (omit to only generate artifacts)
     #[arg(long, value_name = "TOOL")]
     pub ai: Option<AiTool>,
+
+    /// Continue into an interactive AI chat after the review
+    /// pr-review pr 4663 --ai codex --interactive
+    #[arg(long)]
+    pub interactive: bool,
 }
 
 #[derive(Clone, ValueEnum, Debug)]
@@ -61,14 +66,8 @@ impl AiTool {
 
     pub fn manual_hint(&self, prompt_path: &std::path::Path) -> String {
         match self {
-            AiTool::Copilot => format!(
-                "copilot -p \"$(cat {})\"",
-                prompt_path.display()
-            ),
-            AiTool::Codex => format!(
-                "codex review - < {}",
-                prompt_path.display()
-            ),
+            AiTool::Copilot => format!("copilot -p \"$(cat {})\"", prompt_path.display()),
+            AiTool::Codex => format!("codex review - < {}", prompt_path.display()),
         }
     }
 }

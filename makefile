@@ -19,7 +19,18 @@ review-pr: ## Review a CodeCommit Pull Request  (usage: make review-pr AI=copilo
 review-commit: ## Review a CodeCommit Commit  (usage: make review-commit AI=copilot|codex)
 	cargo run --release commit 5ceeb10f2c37a9d85d6ce26ba31d0f080e352603 --ai $(AI) --repo-path $(repo_path)
 
-distr-local: build  ## Build the project and prepare a local distribution
+dist-local: build  ## Build the project and prepare a local distribution
 	cargo build --release
 	mkdir -p ~/.local/bin
 	cp target/release/pr-review ~/.local/bin/
+
+
+# Usage samples:
+# pr-review pr 4663 \
+  --repo-path ~/path-to-repo \
+  --ai codex \
+  --interactive
+# or
+# pr-review commit abc123 \
+  --ai copilot \
+  --interactive

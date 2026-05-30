@@ -1,6 +1,7 @@
 mod artifacts;
 mod cli;
 mod review;
+mod session;
 mod ui;
 
 use anyhow::{Context, Result};
@@ -60,7 +61,10 @@ fn main() -> Result<()> {
     );
 
     if let Some(tool) = &common.ai {
-        println!("{YELLOW}Sending prompt to {}...{RESET}", tool.display_name());
+        println!(
+            "{YELLOW}Sending prompt to {}...{RESET}",
+            tool.display_name()
+        );
 
         let ai_start = Instant::now();
 
@@ -71,9 +75,8 @@ fn main() -> Result<()> {
             prompt_arg
         };
 
-        let spinner_msg: &'static str = Box::leak(
-            format!("{} is reviewing...", tool.display_name()).into_boxed_str()
-        );
+        let spinner_msg: &'static str =
+            Box::leak(format!("{} is reviewing...", tool.display_name()).into_boxed_str());
         let (stop, handle) = start_spinner(spinner_msg);
 
         let result = run_ai_tool(tool, &prompt_arg);
@@ -83,7 +86,7 @@ fn main() -> Result<()> {
 
         let review = result?;
 
-        fs::write(&report_path, review)
+        fs::write(&report_path, &review)
             .with_context(|| format!("Failed to write report file: {}", report_path.display()))?;
 
         let archived_report_path = artifact_dir.join("review.md");
@@ -96,7 +99,20 @@ fn main() -> Result<()> {
             )
         })?;
 
-        print_report(&report_path, &archived_report_path, ai_start.elapsed(), tool);
+        print_report(
+            &report_path,
+            &archived_report_path,
+            ai_start.elapsed(),
+            tool,
+        );
+
+        if common.interactive {
+            if let Some(tool) = &common.ai {
+                session::run_interactive_session(&input, &artifact_dir, tool, &review)?;
+            } else {
+                eprintln!("--interactive requires --ai <copilot|codex>");
+            }
+        }
     }
 
     println!(
