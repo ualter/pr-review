@@ -4,7 +4,9 @@ use crate::artifacts::{repo_name, run_command};
 use crate::cli::{CommonArgs, ReviewInput};
 use crate::scm::codecommit::CodeCommitProvider;
 use crate::scm::{current_scm_kind, ScmKind, ScmProvider};
-use crate::ui::{BLUE_BOLD, LINE, RESET, YELLOW};
+use crate::ui::{
+    BLACK_BOLD, BLUE, BLUE_BOLD, GREEN_BOLD, LINE, RED_BOLD, RESET, YELLOW, YELLOW_BOLD,
+};
 
 pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
     println!("\n{LINE}");
@@ -19,13 +21,45 @@ pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
         &common.repo_path,
         "git",
         &["fetch", &common.remote, &context.source_branch],
-    )?;
+    )
+    .with_context(|| {
+        format!(
+            "{RED_BOLD}Failed to fetch source branch{RESET} `{}` {RED_BOLD}from remote{RESET} `{}` {RED_BOLD}in{RESET} `{}`.\n\n\
+{YELLOW_BOLD}This usually means:{BLUE}\n\
+- `--repo-path` points to the wrong repository\n\
+- `--remote` is not the CodeCommit remote for this PR\n\
+- the source branch was deleted after the PR was opened\n\n\
+{GREEN_BOLD}Try checking:{BLUE}\n\
+- the repository path\n\
+- `git remote -v`\n\
+- whether the branch exists on that remote{BLACK_BOLD}",
+            context.source_branch,
+            common.remote,
+            common.repo_path.display()
+        )
+    })?;
 
     run_command(
         &common.repo_path,
         "git",
         &["fetch", &common.remote, &context.target_branch],
-    )?;
+    )
+    .with_context(|| {
+        format!(
+            "{RED_BOLD}Failed to fetch destination branch{RESET} `{}` {RED_BOLD}from remote{RESET} `{}` {RED_BOLD}in{RESET} `{}`.\n\n\
+{YELLOW_BOLD}This usually means:{BLUE}\n\
+- `--repo-path` points to the wrong repository\n\
+- `--remote` is not the CodeCommit remote for this PR\n\
+- the destination branch no longer exists on that remote\n\n\
+{GREEN_BOLD}Try checking:{BLUE}\n\
+- the repository path\n\
+- `git remote -v`\n\
+- whether the branch exists on that remote{BLACK_BOLD}",
+            context.target_branch,
+            common.remote,
+            common.repo_path.display()
+        )
+    })?;
 
     let diff = run_command(
         &common.repo_path,
