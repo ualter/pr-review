@@ -8,7 +8,11 @@ mod ui;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::{fs, path::PathBuf, time::Instant};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use artifacts::{
     existing_review_artifact_dir, review_artifact_dir, run_ai_tool, write_review_meta,
@@ -104,7 +108,7 @@ fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Re
     let (archived_diff_path, archived_prompt_path) =
         store_review_artifacts(&input, &prompt, &diff_path, &prompt_path, &artifact_dir)?;
 
-    write_review_meta(&artifact_dir, &input, &common.ai)?;
+    write_review_meta(&artifact_dir, &input, &common.repo_path, &common.ai)?;
 
     print_artifacts(
         &diff_path,
@@ -181,7 +185,7 @@ fn store_review_artifacts(
     prompt: &str,
     diff_path: &PathBuf,
     prompt_path: &PathBuf,
-    artifact_dir: &PathBuf,
+    artifact_dir: &Path,
 ) -> Result<(PathBuf, PathBuf), anyhow::Error> {
     fs::write(diff_path, &input.diff)
         .with_context(|| format!("Failed to write diff file: {}", diff_path.display()))?;

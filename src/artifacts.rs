@@ -2,36 +2,167 @@ use crate::ui;
 use crate::ui::{BLACK_BOLD, BLUE_BOLD, RESET, YELLOW, YELLOW_BOLD};
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
+use serde::{Deserialize, Serialize};
 use std::{
     env, fs,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-use tempfile;
 
 use crate::cli::{AiTool, ReviewInput};
+
+const REVIEW_META_SCHEMA_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewMeta {
+    pub schema_version: u32,
+    pub timestamp: String,
+    pub tool: String,
+    pub review_kind: String,
+    pub repo_path: String,
+    pub remote: String,
+    pub artifact_prefix: String,
+    pub repository: String,
+    pub source: String,
+    pub target: String,
+    pub review_ref: String,
+    pub metadata: String,
+    pub pr_id: Option<String>,
+    pub sha: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct LoadedReviewMeta {
+    pub meta: ReviewMeta,
+    pub warning: Option<String>,
+}
 
 pub fn write_review_meta(
     artifact_dir: &Path,
     input: &ReviewInput,
+    repo_path: &Path,
     tool: &Option<AiTool>,
 ) -> Result<()> {
-    let timestamp = Local::now().to_rfc3339();
-    let tool_name = tool.as_ref().map(|t| t.display_name()).unwrap_or("none");
-
-    let meta = serde_json::json!({
-        "timestamp":  timestamp,
-        "tool":       tool_name,
-        "repository": input.repository,
-        "source":     input.source,
-        "target":     input.target,
-        "review_ref": input.review_ref,
-    });
+    let meta = ReviewMeta {
+        schema_version: REVIEW_META_SCHEMA_VERSION,
+        timestamp: Local::now().to_rfc3339(),
+        tool: tool.as_ref().map(|t| t.display_name()).unwrap_or("none").to_string(),
+        review_kind: input.review_kind.clone(),
+        repo_path: repo_path.display().to_string(),
+        remote: input.remote.clone(),
+        artifact_prefix: input.artifact_prefix.clone(),
+        repository: input.repository.clone(),
+        source: input.source.clone(),
+        target: input.target.clone(),
+        review_ref: input.review_ref.clone(),
+        metadata: input.metadata.clone(),
+        pr_id: input.pr_id.clone(),
+        sha: input.sha.clone(),
+    };
 
     let meta_path = artifact_dir.join("meta.json");
     fs::write(&meta_path, serde_json::to_string_pretty(&meta)?)
         .with_context(|| format!("Failed to write meta file: {}", meta_path.display()))
+}
+
+pub fn load_review_meta(artifact_dir: &Path) -> Result<LoadedReviewMeta> {
+    let meta_path = artifact_dir.join("meta.json");
+    let meta_raw = fs::read_to_string(&meta_path)
+        .with_context(|| format!("Failed to read meta file: {}", meta_path.display()))?;
+
+    let value: serde_json::Value = serde_json::from_str(&meta_raw)
+        .with_context(|| format!("Failed to parse meta file: {}", meta_path.display()))?;
+
+    if value.get("schema_version").is_some() {
+        let meta: ReviewMeta = serde_json::from_value(value)
+            .with_context(|| format!("Failed to decode meta file: {}", meta_path.display()))?;
+
+        return Ok(LoadedReviewMeta {
+            meta,
+            warning: None,
+        });
+    }
+
+    let repository = value
+        .get("repository")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Legacy session metadata is missing required field `repository`"))?;
+    let source = value
+        .get("source")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Legacy session metadata is missing required field `source`"))?;
+    let target = value
+        .get("target")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Legacy session metadata is missing required field `target`"))?;
+    let review_ref = value
+        .get("review_ref")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Legacy session metadata is missing required field `review_ref`"))?;
+
+    let review_name = artifact_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("unknown-review")
+        .to_string();
+
+    let inferred_kind = if review_name.starts_with("commit-") {
+        "commit"
+    } else {
+        "pr"
+    };
+    let inferred_pr_id = review_name
+        .strip_prefix("codecommit-pr-")
+        .map(ToString::to_string);
+    let inferred_sha = review_name.strip_prefix("commit-").map(ToString::to_string);
+    let inferred_metadata = match inferred_kind {
+        "commit" => format!(
+            "Review target: commit {}\nRepository: {}\nSource: {}\nTarget: {}",
+            inferred_sha.as_deref().unwrap_or("unknown"),
+            repository,
+            source,
+            target
+        ),
+        _ => format!(
+            "Review target: CodeCommit PR #{}\nRepository: {}\nSource branch: {}\nDestination branch: {}",
+            inferred_pr_id.as_deref().unwrap_or("unknown"),
+            repository,
+            source,
+            target
+        ),
+    };
+
+    Ok(LoadedReviewMeta {
+        meta: ReviewMeta {
+            schema_version: 1,
+            timestamp: value
+                .get("timestamp")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            tool: value
+                .get("tool")
+                .and_then(|v| v.as_str())
+                .unwrap_or("none")
+                .to_string(),
+            review_kind: inferred_kind.to_string(),
+            repo_path: ".".to_string(),
+            remote: "origin".to_string(),
+            artifact_prefix: review_name,
+            repository: repository.to_string(),
+            source: source.to_string(),
+            target: target.to_string(),
+            review_ref: review_ref.to_string(),
+            metadata: inferred_metadata,
+            pr_id: inferred_pr_id,
+            sha: inferred_sha,
+        },
+        warning: Some(
+            "Session was created by an older pr-review version. Resume will use inferred metadata; create a new session to persist full context."
+                .to_string(),
+        ),
+    })
 }
 
 const MAX_COPILOT_PROMPT_BYTES: usize = 129_000;
@@ -200,6 +331,10 @@ pub fn list_review_sessions() -> Result<Vec<String>> {
         .map(|entry| entry.path())
         .filter(|path| path.is_dir())
         .filter(|path| path.join("conversation.md").exists())
+        .filter(|path| path.join("conversation-summary.md").exists())
+        .filter(|path| path.join("review-summary.md").exists())
+        .filter(|path| path.join("diff.patch").exists())
+        .filter(|path| path.join("meta.json").exists())
         .filter_map(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
@@ -222,4 +357,75 @@ pub fn select_review_session() -> Result<String> {
     }
 
     ui::pick_session(sessions)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::ReviewInput;
+
+    fn sample_review_input() -> ReviewInput {
+        ReviewInput {
+            diff: "diff --git a/src/lib.rs b/src/lib.rs".to_string(),
+            metadata: "Review target: CodeCommit PR #42\nRepository: datahub\nSource branch: feature\nDestination branch: main".to_string(),
+            prompt_scope: "scope".to_string(),
+            artifact_prefix: "codecommit-pr-42".to_string(),
+            review_kind: "pr".to_string(),
+            repository: "datahub".to_string(),
+            source: "feature".to_string(),
+            target: "main".to_string(),
+            review_ref: "review/pr-42".to_string(),
+            remote: "origin".to_string(),
+            pr_id: Some("42".to_string()),
+            sha: None,
+        }
+    }
+
+    #[test]
+    fn writes_and_loads_current_review_meta() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input = sample_review_input();
+
+        write_review_meta(temp_dir.path(), &input, Path::new("/tmp/repo"), &Some(AiTool::Codex))
+            .unwrap();
+
+        let loaded = load_review_meta(temp_dir.path()).unwrap();
+
+        assert!(loaded.warning.is_none());
+        assert_eq!(loaded.meta.schema_version, 2);
+        assert_eq!(loaded.meta.review_kind, "pr");
+        assert_eq!(loaded.meta.repo_path, "/tmp/repo");
+        assert_eq!(loaded.meta.remote, "origin");
+        assert_eq!(loaded.meta.pr_id.as_deref(), Some("42"));
+        assert_eq!(loaded.meta.metadata, input.metadata);
+    }
+
+    #[test]
+    fn loads_legacy_review_meta_with_warning() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let artifact_dir = temp_dir.path().join("commit-deadbeef");
+        fs::create_dir_all(&artifact_dir).unwrap();
+
+        fs::write(
+            artifact_dir.join("meta.json"),
+            r#"{
+  "timestamp": "2026-05-28T10:00:00+00:00",
+  "tool": "Codex",
+  "repository": "internal-repo",
+  "source": "deadbeef",
+  "target": "single commit",
+  "review_ref": "review/commit-deadbeef"
+}"#,
+        )
+        .unwrap();
+
+        let loaded = load_review_meta(&artifact_dir).unwrap();
+
+        assert!(loaded.warning.is_some());
+        assert_eq!(loaded.meta.schema_version, 1);
+        assert_eq!(loaded.meta.review_kind, "commit");
+        assert_eq!(loaded.meta.sha.as_deref(), Some("deadbeef"));
+        assert_eq!(loaded.meta.remote, "origin");
+        assert!(loaded.meta.metadata.contains("Review target: commit deadbeef"));
+    }
 }

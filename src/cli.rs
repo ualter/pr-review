@@ -111,8 +111,12 @@ pub struct ReviewInput {
     pub metadata: String,
     pub prompt_scope: String,
     pub artifact_prefix: String,
+    pub review_kind: String,
     pub repository: String,
     pub source: String,
     pub target: String,
     pub review_ref: String,
+    pub remote: String,
+    pub pr_id: Option<String>,
+    pub sha: Option<String>,
 }

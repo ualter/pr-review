@@ -7,9 +7,12 @@ use std::{
 };
 
 use crate::{
-    artifacts::run_ai_tool,
+    artifacts::{load_review_meta, run_ai_tool},
     cli::{AiTool, ReviewInput},
-    markdown_viewer::{open_markdown_viewer, print_markdown_document},
+    markdown_viewer::{
+        open_markdown_text, open_markdown_viewer, open_markdown_viewer_at_end,
+        print_markdown_document, print_markdown_text,
+    },
     ui::{
         print_interactive_help, start_spinner, BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET,
         YELLOW, YELLOW_BOLD,
@@ -96,14 +99,22 @@ pub fn run_interactive_session(
         tool.display_name()
     );
 
+    println!("{BLACK_BOLD}Commands:{RESET}");
     println!(
-        "{BLACK_BOLD}Commands:{RESET} \
-{YELLOW}/help{RESET} • \
-{YELLOW}/summary{RESET} • \
-{YELLOW}/review{RESET} • \
-{YELLOW}/last{RESET} • \
-{YELLOW}/full{RESET} • \
-{YELLOW}/exit{RESET}"
+        "  {YELLOW}/help{RESET}  {YELLOW}/exit{RESET}  {YELLOW}/full{RESET}"
+    );
+    println!("{BLACK_BOLD}Views:{RESET}");
+    println!(
+        "  {YELLOW}/summary{RESET}  {YELLOW}/summary-print{RESET}"
+    );
+    println!(
+        "  {YELLOW}/review{RESET}  {YELLOW}/review-print{RESET}"
+    );
+    println!(
+        "  {YELLOW}/review-summary{RESET}  {YELLOW}/review-summary-print{RESET}"
+    );
+    println!(
+        "  {YELLOW}/last [N]{RESET}  {YELLOW}/last-print [N]{RESET}"
     );
 
     println!(
@@ -121,6 +132,34 @@ pub fn run_interactive_session(
         let user_question = user_question.trim();
 
         if user_question.is_empty() {
+            continue;
+        }
+
+        if let Some(last_count) = parse_last_command(user_question, "/last")? {
+            match last_count {
+                None => {
+                    open_markdown_viewer_at_end(
+                        "💬 Last Conversation",
+                        &session.conversation_path,
+                    )?;
+                }
+                Some(count) => {
+                    let conversation =
+                        load_last_conversation_markdown(&session.conversation_path, Some(count))?;
+                    let title = format!("💬 Last {count} Conversation Exchanges");
+                    open_markdown_text(&title, &conversation, true)?;
+                }
+            }
+            continue;
+        }
+
+        if let Some(last_count) = parse_last_command(user_question, "/last-print")? {
+            let conversation = load_last_conversation_markdown(&session.conversation_path, last_count)?;
+            let title = match last_count {
+                Some(count) => format!("Last {count} Conversation Exchanges"),
+                None => "Last Conversation".to_string(),
+            };
+            print_markdown_text(&title, &conversation)?;
             continue;
         }
 
@@ -146,25 +185,24 @@ pub fn run_interactive_session(
             }
 
             "/review" => {
-                open_markdown_viewer("🧠 Review Summary", &artifact_dir.join("review.md"))?;
+                open_markdown_viewer("🧠 Full Review", &artifact_dir.join("review.md"))?;
                 continue;
             }
             "/review-print" => {
-                print_markdown_document("Review Summary", &artifact_dir.join("review.md"))?;
+                print_markdown_document("Full Review", &artifact_dir.join("review.md"))?;
                 continue;
             }
-
-            "/last" => {
+            "/review-summary" => {
                 open_markdown_viewer(
-                    "💬 Last Conversation",
-                    &artifact_dir.join("conversation.md"),
+                    "🧠 Review Summary",
+                    &artifact_dir.join("review-summary.md"),
                 )?;
                 continue;
             }
-            "/last-print" => {
+            "/review-summary-print" => {
                 print_markdown_document(
-                    "Last Conversation",
-                    &artifact_dir.join("conversation.md"),
+                    "Review Summary",
+                    &artifact_dir.join("review-summary.md"),
                 )?;
                 continue;
             }
@@ -356,6 +394,106 @@ fn append_message(path: &Path, role: &str, message: &str) -> Result<()> {
     Ok(())
 }
 
+fn parse_last_command(input: &str, command: &str) -> Result<Option<Option<usize>>> {
+    if input == command {
+        return Ok(Some(None));
+    }
+
+    let Some(rest) = input.strip_prefix(command) else {
+        return Ok(None);
+    };
+
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Ok(Some(None));
+    }
+
+    let count = rest.parse::<usize>().with_context(|| {
+        format!("Invalid `{command}` argument `{rest}`. Use `{command}` or `{command} <N>`.")
+    })?;
+
+    if count == 0 {
+        anyhow::bail!("Invalid `{command}` argument `0`. Use a value greater than zero.");
+    }
+
+    Ok(Some(Some(count)))
+}
+
+fn load_last_conversation_markdown(path: &Path, exchange_count: Option<usize>) -> Result<String> {
+    let conversation = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read {}", path.display()))?;
+
+    match exchange_count {
+        None => Ok(conversation),
+        Some(count) => slice_last_conversation_exchanges(&conversation, count),
+    }
+}
+
+fn slice_last_conversation_exchanges(conversation: &str, exchange_count: usize) -> Result<String> {
+    let entries = parse_conversation_entries(conversation);
+    let user_indices: Vec<usize> = entries
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, entry)| (entry.role == "USER").then_some(idx))
+        .collect();
+
+    if user_indices.is_empty() {
+        return Ok("# Review Conversation\n\nNo saved conversation exchanges yet.\n".to_string());
+    }
+
+    let start_user_pos = user_indices.len().saturating_sub(exchange_count);
+    let start_idx = user_indices[start_user_pos];
+
+    let mut markdown = String::from("# Review Conversation\n\n");
+    for entry in entries.iter().skip(start_idx) {
+        markdown.push_str("## ");
+        markdown.push_str(&entry.role);
+        markdown.push_str("\n\n");
+        markdown.push_str(entry.message.trim());
+        markdown.push_str("\n\n");
+    }
+
+    Ok(markdown)
+}
+
+fn parse_conversation_entries(conversation: &str) -> Vec<ConversationEntry> {
+    let mut entries = Vec::new();
+    let mut current_role: Option<&str> = None;
+    let mut current_message: Vec<&str> = Vec::new();
+
+    for line in conversation.lines() {
+        match line {
+            "## USER" | "## AI" => {
+                if let Some(role) = current_role.take() {
+                    entries.push(ConversationEntry {
+                        role: role.to_string(),
+                        message: current_message.join("\n").trim().to_string(),
+                    });
+                }
+
+                current_role = Some(line.trim_start_matches("## ").trim());
+                current_message.clear();
+            }
+            _ if current_role.is_some() => current_message.push(line),
+            _ => {}
+        }
+    }
+
+    if let Some(role) = current_role {
+        entries.push(ConversationEntry {
+            role: role.to_string(),
+            message: current_message.join("\n").trim().to_string(),
+        });
+    }
+
+    entries
+}
+
+struct ConversationEntry {
+    role: String,
+    message: String,
+}
+
 fn read_or_default(path: &Path, default: &str) -> Result<String> {
     if path.exists() {
         Ok(fs::read_to_string(path)
@@ -415,15 +553,8 @@ fn write_single_file_diff(
 
 fn sanitize_file_name(file_path: &str) -> String {
     file_path
-        .replace('\\', "__")
-        .replace('/', "__")
-        .replace(':', "_")
-        .replace('*', "_")
-        .replace('?', "_")
-        .replace('"', "_")
-        .replace('<', "_")
-        .replace('>', "_")
-        .replace('|', "_")
+        .replace(['\\', '/'], "__")
+        .replace([':', '*', '?', '"', '<', '>', '|'], "_")
 }
 
 fn select_relevant_diff_by_file(diff_by_file_dir: &Path, question: &str) -> Result<Option<String>> {
@@ -610,6 +741,8 @@ pub fn resume_interactive_session(artifact_dir: &Path, tool: &AiTool) -> Result<
     let review_summary_path = artifact_dir.join("review-summary.md");
     let conversation_summary_path = artifact_dir.join("conversation-summary.md");
     let diff_by_file_dir = artifact_dir.join("diff-by-file");
+    let diff_path = artifact_dir.join("diff.patch");
+    let meta_path = artifact_dir.join("meta.json");
 
     if !conversation_path.exists() {
         display_no_session_warning(artifact_dir, "conversation.md");
@@ -628,6 +761,16 @@ pub fn resume_interactive_session(artifact_dir: &Path, tool: &AiTool) -> Result<
 
     if !diff_by_file_dir.exists() {
         display_no_session_warning(artifact_dir, "diff-by-file");
+        std::process::exit(0);
+    }
+
+    if !diff_path.exists() {
+        display_no_session_warning(artifact_dir, "diff.patch");
+        std::process::exit(0);
+    }
+
+    if !meta_path.exists() {
+        display_no_session_warning(artifact_dir, "meta.json");
         std::process::exit(0);
     }
 
@@ -687,21 +830,29 @@ fn display_no_session_warning(artifact_dir: &Path, missing_file: &str) {
 
 fn load_review_input_from_session(artifact_dir: &Path) -> Result<ReviewInput> {
     let diff = std::fs::read_to_string(artifact_dir.join("diff.patch"))?;
+    let loaded_meta = load_review_meta(artifact_dir)?;
 
-    let review_name = artifact_dir
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("unknown-review")
-        .to_string();
+    if let Some(warning) = &loaded_meta.warning {
+        println!("{LINE}");
+        println!("{YELLOW_BOLD}⚠ Legacy session detected.{RESET}");
+        println!("{BLACK_BOLD}{warning}{RESET}");
+        println!("{LINE}");
+    }
+
+    let meta = loaded_meta.meta;
 
     Ok(ReviewInput {
         diff,
-        metadata: format!("Resumed review session: {review_name}"),
+        metadata: meta.metadata,
         prompt_scope: "Resumed interactive review session.".to_string(),
-        artifact_prefix: review_name.clone(),
-        repository: "resumed-session".to_string(),
-        source: "existing-review".to_string(),
-        target: "existing-review".to_string(),
-        review_ref: review_name,
+        artifact_prefix: meta.artifact_prefix,
+        review_kind: meta.review_kind,
+        repository: meta.repository,
+        source: meta.source,
+        target: meta.target,
+        review_ref: meta.review_ref,
+        remote: meta.remote,
+        pr_id: meta.pr_id,
+        sha: meta.sha,
     })
 }

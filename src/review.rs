@@ -74,10 +74,14 @@ pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
         ),
         prompt_scope: "Review ONLY the changes contained in this PR diff file. Treat this diff as the source of truth.".to_string(),
         artifact_prefix: format!("codecommit-pr-{pr_id}"),
+        review_kind: "pr".to_string(),
         repository,
         source: source_branch.clone(),
         target: destination_branch.clone(),
         review_ref: format!("review/pr-{pr_id}"),
+        remote: common.remote.clone(),
+        pr_id: Some(pr_id.to_string()),
+        sha: None,
     })
 }
 
@@ -128,10 +132,14 @@ pub fn review_commit(sha: &str, common: &CommonArgs) -> Result<ReviewInput> {
         metadata,
         prompt_scope: "Review ONLY the changes introduced by this commit. Treat this commit diff as the source of truth.".to_string(),
         artifact_prefix: format!("commit-{sha}"),
+        review_kind: "commit".to_string(),
         repository: repo_name(&common.repo_path),
         source: sha.to_string(),
         target: "single commit".to_string(),
         review_ref: format!("review/commit-{sha}"),
+        remote: common.remote.clone(),
+        pr_id: None,
+        sha: Some(sha.to_string()),
     })
 }
 

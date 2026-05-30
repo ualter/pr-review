@@ -166,34 +166,67 @@ pub fn start_spinner(message: impl Into<String>) -> SpinnerHandle {
 }
 
 pub fn print_interactive_help(tool: &AiTool) {
+    let help_rows = [
+        (
+            "❓ /help",
+            "Show available commands and shortcuts",
+        ),
+        (
+            "📋 /summary",
+            "Show the AI-generated conversation summary",
+        ),
+        (
+            "📋 /summary-print",
+            "Print the AI-generated conversation summary",
+        ),
+        (
+            "🧠 /review",
+            "Show the full PR/commit review results",
+        ),
+        (
+            "🧠 /review-print",
+            "Print the full PR/commit review results",
+        ),
+        (
+            "🧠 /review-summary",
+            "Show the saved review summary",
+        ),
+        (
+            "🧠 /review-summary-print",
+            "Print the saved review summary",
+        ),
+        (
+            "💬 /last",
+            "Show the latest interactive conversation or `/last N` exchanges",
+        ),
+        (
+            "💬 /last-print",
+            "Print the latest interactive conversation or `/last-print N` exchanges",
+        ),
+        (
+            "🔄 /full",
+            "Restart the review session from scratch",
+        ),
+        (
+            "🚪 /exit",
+            "Save the session and exit",
+        ),
+    ];
+
     println!("{LINE}");
     println!();
     println!("{GREEN_BOLD}Available Commands:{RESET}");
-    println!(
-        "  {YELLOW}❓ /help{RESET}          {BLACK_BOLD}Show available commands and shortcuts{RESET}"
-    );
-    println!(
-    "  {YELLOW}📋 /summary{RESET}       {BLACK_BOLD}Show the AI-generated conversation summary{RESET}"
-);
-    println!(
-    "  {YELLOW}📋 /summary-print{RESET} {BLACK_BOLD}Print the AI-generated conversation summary{RESET}"
-);
-    println!(
-    "  {YELLOW}🧠 /review{RESET}        {BLACK_BOLD}Show the original PR/commit review results{RESET}"
-);
-    println!(
-    "  {YELLOW}🧠 /review-print{RESET}  {BLACK_BOLD}Print the original PR/commit review results{RESET}"
-);
-    println!(
-    "  {YELLOW}💬 /last{RESET}          {BLACK_BOLD}Show the latest interactive conversation{RESET}"
-);
-    println!(
-        "  {YELLOW}💬 /last-print{RESET}    {BLACK_BOLD}Print the latest interactive conversation{RESET}"
-    );
-    println!(
-        "  {YELLOW}🔄 /full{RESET}          {BLACK_BOLD}Restart the review session from scratch{RESET}"
-    );
-    println!("  {YELLOW}🚪 /exit{RESET}          {BLACK_BOLD}Save the session and exit{RESET}");
+    let command_width = help_rows
+        .iter()
+        .map(|(command, _)| command.chars().count())
+        .max()
+        .unwrap_or(0);
+    for (command, description) in help_rows {
+        let padding = " ".repeat(command_width.saturating_sub(command.chars().count()));
+        println!(
+            "  {YELLOW}{command}{RESET}{padding}  {BLACK_BOLD}{description}{RESET}"
+        );
+    }
     println!();
 
     println!("{BLACK_BOLD}Anything else will be sent directly to the AI assistant {BLACK_BOLD}({}).{RESET}", tool.display_name());
@@ -231,7 +264,7 @@ pub fn print_startup_banner() {
         std::thread::sleep(std::time::Duration::from_millis(70));
     }
 
-    print!("  {BLACK_BOLD} AI-Assisted Engineering Review CLI{RESET}\n");
+    println!("  {BLACK_BOLD} AI-Assisted Engineering Review CLI{RESET}");
     // println!("{LINE}");
 }
 
@@ -277,7 +310,7 @@ pub fn pick_session(sessions: Vec<String>) -> Result<String> {
 
     term.clear_to_end_of_screen()?;
 
-    let line = format!("-----------------------------------------------------------");
+    let line = "-----------------------------------------------------------";
     //
     let index = dialoguer::Select::with_theme(&theme)
         // let index = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())

@@ -20,6 +20,17 @@ pub fn open_markdown_viewer(title: &str, path: &Path) -> Result<()> {
     let markdown = fs::read_to_string(path)
         .with_context(|| format!("Failed to read markdown file: {}", path.display()))?;
 
+    open_markdown_text(title, &markdown, false)
+}
+
+pub fn open_markdown_viewer_at_end(title: &str, path: &Path) -> Result<()> {
+    let markdown = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read markdown file: {}", path.display()))?;
+
+    open_markdown_text(title, &markdown, true)
+}
+
+pub fn open_markdown_text(title: &str, markdown: &str, start_at_end: bool) -> Result<()> {
     enable_raw_mode()?;
 
     let mut stdout = io::stdout();
@@ -28,7 +39,7 @@ pub fn open_markdown_viewer(title: &str, path: &Path) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_viewer(&mut terminal, title, &markdown);
+    let result = run_viewer(&mut terminal, title, markdown, start_at_end);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -41,9 +52,16 @@ fn run_viewer(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     title: &str,
     markdown: &str,
+    start_at_end: bool,
 ) -> Result<()> {
     let lines = render_markdown(markdown);
-    let mut scroll: u16 = 0;
+    let mut scroll: u16 = if start_at_end {
+        let area = terminal.size()?;
+        let content_height = area.height.saturating_sub(3) as usize;
+        lines.len().saturating_sub(content_height) as u16
+    } else {
+        0
+    };
 
     loop {
         terminal.draw(|frame| {
@@ -356,6 +374,10 @@ pub fn print_markdown_document(title: &str, path: &Path) -> Result<()> {
     let markdown = fs::read_to_string(path)
         .with_context(|| format!("Failed to read markdown file: {}", path.display()))?;
 
+    print_markdown_text(title, &markdown)
+}
+
+pub fn print_markdown_text(title: &str, markdown: &str) -> Result<()> {
     let skin = MadSkin::default();
 
     println!();
@@ -363,7 +385,7 @@ pub fn print_markdown_document(title: &str, path: &Path) -> Result<()> {
     println!("{YELLOW_BOLD}📄 {title}{RESET}");
     println!("{LINE}");
 
-    skin.print_text(&markdown);
+    skin.print_text(markdown);
 
     println!("{LINE}");
     println!("{BLACK_BOLD}End of document. Use your terminal scrollback to review above.{RESET}");
