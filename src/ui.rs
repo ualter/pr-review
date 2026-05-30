@@ -131,12 +131,12 @@ pub fn start_spinner(message: impl Into<String>) -> SpinnerHandle {
     let stop_thread = Arc::clone(&stop);
 
     let handle = thread::spawn(move || {
-        let chars = ["|", "/", "-", "\\"];
+        let chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         let mut i = 0;
 
         while !stop_thread.load(Ordering::Relaxed) {
             print!(
-                "\r{}{} {}{}",
+                "\r🤖 {}{} {}{}",
                 YELLOW,
                 message,
                 chars[i % chars.len()],
