@@ -93,6 +93,7 @@ pub fn run_interactive_session(
     tool: &AiTool,
 ) -> Result<()> {
     let session = ReviewSession::new(artifact_dir)?;
+    let mut conversation_summary_dirty = false;
 
     println!(
         "{GREEN_BOLD}Interactive review session started with {}{RESET}",
@@ -208,6 +209,12 @@ pub fn run_interactive_session(
             }
 
             "/exit" | "exit" => {
+                if conversation_summary_dirty {
+                    let spinner =
+                        start_spinner(format!("{} is updating the conversation summary...", tool.display_name()));
+                    update_conversation_summary(&session, tool)?;
+                    spinner.stop();
+                }
                 println!("{LINE}");
                 println!(
                     "{}Conversation saved to:{} {}",
@@ -224,10 +231,11 @@ pub fn run_interactive_session(
                 continue;
             }
             "" => continue,
-            _ => process_user_question(input, tool, &session, user_question)?,
+            _ => {
+                process_user_question(input, tool, &session, user_question)?;
+                conversation_summary_dirty = true;
+            }
         }
-
-        process_user_question(input, tool, &session, user_question)?;
     }
 
     Ok(())
@@ -274,7 +282,6 @@ fn process_user_question(
         println!();
     }
     session.append_ai_message(&answer)?;
-    update_conversation_summary(session, tool)?;
     Ok(())
 }
 
