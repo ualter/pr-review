@@ -1,52 +1,30 @@
 use anyhow::{anyhow, Context, Result};
-use serde_json::Value;
 
 use crate::artifacts::{repo_name, run_command};
 use crate::cli::{CommonArgs, ReviewInput};
+use crate::scm::codecommit::CodeCommitProvider;
+use crate::scm::{current_scm_kind, ScmKind, ScmProvider};
 use crate::ui::{BLUE_BOLD, LINE, RESET, YELLOW};
 
 pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
     println!("\n{LINE}");
     println!("{YELLOW}Validating PR ID {BLUE_BOLD}{pr_id}...{RESET}");
     println!("{YELLOW}Fetching CodeCommit PR metadata...{RESET}");
-
-    let json = run_command(
-        &common.repo_path,
-        "aws",
-        &["codecommit", "get-pull-request", "--pull-request-id", pr_id],
-    )?;
-
-    let parsed: Value = serde_json::from_str(&json)?;
-    let pr = &parsed["pullRequest"];
-
-    let target = pr["pullRequestTargets"]
-        .as_array()
-        .and_then(|items| items.first())
-        .ok_or_else(|| anyhow!("No pullRequestTargets found"))?;
-
-    let source = target["sourceReference"]
-        .as_str()
-        .ok_or_else(|| anyhow!("Missing sourceReference"))?;
-
-    let destination = target["destinationReference"]
-        .as_str()
-        .ok_or_else(|| anyhow!("Missing destinationReference"))?;
-
-    let source_branch = clean_branch_name(source);
-    let destination_branch = clean_branch_name(destination);
+    let provider = resolve_scm_provider();
+    let context = provider.resolve_pr_context(pr_id, common)?;
 
     println!("{YELLOW}Fetching branches...{RESET}");
 
     run_command(
         &common.repo_path,
         "git",
-        &["fetch", &common.remote, &source_branch],
+        &["fetch", &common.remote, &context.source_branch],
     )?;
 
     run_command(
         &common.repo_path,
         "git",
-        &["fetch", &common.remote, &destination_branch],
+        &["fetch", &common.remote, &context.target_branch],
     )?;
 
     let diff = run_command(
@@ -54,31 +32,24 @@ pub fn review_pr(pr_id: &str, common: &CommonArgs) -> Result<ReviewInput> {
         "git",
         &[
             "diff",
-            &format!("{}/{}", common.remote, destination_branch),
-            &format!("{}/{}", common.remote, source_branch),
+            &format!("{}/{}", common.remote, context.target_branch),
+            &format!("{}/{}", common.remote, context.source_branch),
             "--",
         ],
     )?;
 
     ensure_non_empty_diff(&diff)?;
 
-    let repository = target["repositoryName"]
-        .as_str()
-        .unwrap_or("unknown-repository")
-        .to_string();
-
     Ok(ReviewInput {
         diff,
-        metadata: format!(
-            "Review target: CodeCommit PR #{pr_id}\nRepository: {repository}\nSource branch: {source_branch}\nDestination branch: {destination_branch}"
-        ),
+        metadata: context.metadata,
         prompt_scope: "Review ONLY the changes contained in this PR diff file. Treat this diff as the source of truth.".to_string(),
         artifact_prefix: format!("codecommit-pr-{pr_id}"),
         review_kind: "pr".to_string(),
-        repository,
-        source: source_branch.clone(),
-        target: destination_branch.clone(),
-        review_ref: format!("review/pr-{pr_id}"),
+        repository: context.repository,
+        source: context.source_branch,
+        target: context.target_branch,
+        review_ref: context.review_ref,
         remote: common.remote.clone(),
         pr_id: Some(pr_id.to_string()),
         sha: None,
@@ -216,11 +187,10 @@ Diff:
     )
 }
 
-fn clean_branch_name(reference: &str) -> String {
-    reference
-        .strip_prefix("refs/heads/")
-        .unwrap_or(reference)
-        .to_string()
+fn resolve_scm_provider() -> Box<dyn ScmProvider> {
+    match current_scm_kind() {
+        ScmKind::CodeCommit => Box::new(CodeCommitProvider),
+    }
 }
 
 fn ensure_non_empty_diff(diff: &str) -> Result<()> {

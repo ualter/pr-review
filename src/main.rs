@@ -4,6 +4,7 @@ mod config;
 mod doctor;
 mod markdown_viewer;
 mod review;
+mod scm;
 mod session;
 mod ui;
 
