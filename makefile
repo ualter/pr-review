@@ -25,12 +25,25 @@ dist-local: build  ## Build the project and prepare a local distribution
 	cp target/release/pr-review ~/.local/bin/
 
 
-# Usage samples:
+# USAGE SAMPLES:
+
+# First time, run the review normally:
 # pr-review pr 4663 \
   --repo-path ~/path-to-repo \
   --ai codex \
   --interactive
-# or
+
 # pr-review commit abc123 \
   --ai copilot \
   --interactive
+
+# pr-review pr 4663 --repo-path ~/developer/repos/backend --ai codex --interactive
+
+# Later, resume the same interactive session directly:
+# pr-review session codecommit-pr-4663 --ai codex
+
+# For a Commit review:
+# pr-review commit abc123 --repo-path ~/developer/repos/backend --ai codex --interactive
+
+# Resume it later:
+# pr-review session commit-abc123 --ai codex

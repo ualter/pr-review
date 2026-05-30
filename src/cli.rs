@@ -9,6 +9,12 @@ pub struct Cli {
     pub command: Commands,
 }
 
+#[derive(Args, Clone)]
+pub struct SessionArgs {
+    #[arg(long)]
+    pub ai: AiTool,
+}
+
 #[derive(Subcommand)]
 pub enum Commands {
     /// Review an AWS CodeCommit Pull Request
@@ -25,6 +31,16 @@ pub enum Commands {
 
         #[command(flatten)]
         common: CommonArgs,
+    },
+
+    /// Resume an existing interactive review session
+    Session {
+        /// Existing review name, e.g. codecommit-pr-4663 or commit-abc123
+        review_name: String,
+
+        /// AI tool used for the interactive session
+        #[arg(long, value_name = "TOOL")]
+        ai: AiTool,
     },
 }
 

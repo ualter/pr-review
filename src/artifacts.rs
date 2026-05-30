@@ -9,7 +9,11 @@ use std::{
 
 use crate::cli::{AiTool, ReviewInput};
 
-pub fn write_review_meta(artifact_dir: &Path, input: &ReviewInput, tool: &Option<AiTool>) -> Result<()> {
+pub fn write_review_meta(
+    artifact_dir: &Path,
+    input: &ReviewInput,
+    tool: &Option<AiTool>,
+) -> Result<()> {
     let timestamp = Local::now().to_rfc3339();
     let tool_name = tool.as_ref().map(|t| t.display_name()).unwrap_or("none");
 
@@ -125,6 +129,27 @@ pub fn review_artifact_dir(review_name: &str) -> Result<PathBuf> {
             dir.display()
         )
     })?;
+
+    Ok(dir)
+}
+
+pub fn existing_review_artifact_dir(review_name: &str) -> Result<PathBuf> {
+    let dir = reports_archive_dir()?.join(review_name);
+
+    if !dir.exists() {
+        return Err(anyhow!(
+            "Review session not found: {}\nExpected directory: {}",
+            review_name,
+            dir.display()
+        ));
+    }
+
+    if !dir.is_dir() {
+        return Err(anyhow!(
+            "Review session path exists but is not a directory: {}",
+            dir.display()
+        ));
+    }
 
     Ok(dir)
 }

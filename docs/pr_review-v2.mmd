@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+
+    actor User
+    participant CLI as pr-review CLI
+    participant Git as Git / CodeCommit
+    participant FS as ~/.pr-review/reports
+    participant AI as AI Tool
+    participant Chat as Interactive Session
+
+    alt New PR / Commit review
+        User->>CLI: pr-review pr 4663 --ai codex --interactive
+        CLI->>Git: Fetch PR/commit metadata
+        CLI->>Git: Generate diff
+        CLI->>CLI: Build review prompt
+        CLI->>FS: Save diff.patch, prompt.txt, meta.json
+        CLI->>AI: Run initial AI review
+        AI-->>CLI: Review report
+        CLI->>FS: Save review.md
+        CLI->>CLI: prepare_session_artifacts()
+        CLI->>Chat: run_interactive_session()
+        Chat->>FS: Save chat/session state
+    else Resume existing session
+        User->>CLI: pr-review session codecommit-pr-4663 --ai codex
+        CLI->>FS: Locate existing artifact directory
+        CLI->>FS: Load existing session state
+        CLI->>Chat: resume_interactive_session()
+        Chat->>AI: Continue previous conversation
+        Chat->>FS: Save updated chat/session state
+    end

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::{
     collections::HashMap,
     fs::{self, OpenOptions},
@@ -18,6 +18,7 @@ pub struct SelectedContext {
     pub relevant_diff: Option<String>,
 }
 
+#[allow(dead_code)]
 pub struct ReviewSession {
     pub artifact_dir: PathBuf,
     pub conversation_path: PathBuf,
@@ -548,4 +549,57 @@ fn extract_keywords(question_lower: &str) -> Vec<String> {
         })
         .map(ToString::to_string)
         .collect()
+}
+
+pub fn resume_interactive_session(artifact_dir: &Path, ai: &AiTool) -> Result<()> {
+    if !artifact_dir.exists() {
+        return Err(anyhow!(
+            "Review artifact directory does not exist: {}",
+            artifact_dir.display()
+        ));
+    }
+
+    let session_path = artifact_dir.join("session.json");
+
+    if !session_path.exists() {
+        return Err(anyhow!(
+            "No interactive session found for this review.\nExpected: {}",
+            session_path.display()
+        ));
+    }
+
+    match ai {
+        AiTool::Copilot => resume_copilot_session(artifact_dir),
+        AiTool::Codex => resume_codex_session(artifact_dir),
+    }
+}
+
+fn resume_copilot_session(artifact_dir: &Path) -> Result<()> {
+    // Use your existing Copilot interactive resume logic here.
+    //
+    // Important:
+    // - do NOT rebuild prompt
+    // - do NOT rerun review
+    // - load previous session state
+    // - continue chat
+
+    Err(anyhow!(
+        "Copilot interactive session resume is not implemented yet for {}",
+        artifact_dir.display()
+    ))
+}
+
+fn resume_codex_session(artifact_dir: &Path) -> Result<()> {
+    // Use your existing Codex interactive resume logic here.
+    //
+    // Important:
+    // - do NOT rebuild prompt
+    // - do NOT rerun review
+    // - load previous session state
+    // - continue chat
+
+    Err(anyhow!(
+        "Codex interactive session resume is not implemented yet for {}",
+        artifact_dir.display()
+    ))
 }

@@ -8,9 +8,12 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::{fs, path::PathBuf, sync::atomic::Ordering, time::Instant};
 
-use artifacts::{review_artifact_dir, run_ai_tool, write_review_meta};
-use cli::{Cli, Commands};
+use artifacts::{
+    existing_review_artifact_dir, review_artifact_dir, run_ai_tool, write_review_meta,
+};
+use cli::{Cli, Commands, CommonArgs, ReviewInput};
 use review::{build_prompt, review_commit, review_pr};
+use session::resume_interactive_session;
 use ui::{print_artifacts, print_header, print_report, start_spinner, GREEN, RESET, YELLOW};
 
 const TESTING: bool = false;
@@ -19,19 +22,35 @@ fn main() -> Result<()> {
     let start = Instant::now();
     let cli = Cli::parse();
 
-    // PR review     = diff between target branch and source branch
-    // Commit review = diff introduced by one single commit (its parent vs itself)
-    let (input, common) = match cli.command {
+    match cli.command {
+        Commands::Session { review_name, ai } => {
+            let artifact_dir = existing_review_artifact_dir(&review_name)?;
+
+            resume_interactive_session(&artifact_dir, &ai)?;
+
+            println!(
+                "{GREEN}Done in {:.2}s{RESET}",
+                start.elapsed().as_secs_f64()
+            );
+
+            Ok(())
+        }
+
         Commands::Pr { pr_id, common } => {
             let input = review_pr(&pr_id, &common)?;
-            (input, common)
+
+            run_review_flow(input, common, start)
         }
+
         Commands::Commit { sha, common } => {
             let input = review_commit(&sha, &common)?;
-            (input, common)
-        }
-    };
 
+            run_review_flow(input, common, start)
+        }
+    }
+}
+
+fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Result<()> {
     let prompt = build_prompt(&input);
     let tmp_dir = std::env::temp_dir();
     let diff_path = tmp_dir.join(format!("{}-diff.patch", input.artifact_prefix));
@@ -77,6 +96,7 @@ fn main() -> Result<()> {
 
         let spinner_msg: &'static str =
             Box::leak(format!("{} is reviewing...", tool.display_name()).into_boxed_str());
+
         let (stop, handle) = start_spinner(spinner_msg);
 
         let result = run_ai_tool(tool, &prompt_arg);
@@ -106,7 +126,6 @@ fn main() -> Result<()> {
             tool,
         );
 
-        // Create diff by file and summarized review for interactive session
         session::prepare_session_artifacts(&artifact_dir, &input, &review, tool)?;
 
         if common.interactive {
@@ -131,10 +150,13 @@ fn store_review_artifacts(
 ) -> Result<(PathBuf, PathBuf), anyhow::Error> {
     fs::write(diff_path, &input.diff)
         .with_context(|| format!("Failed to write diff file: {}", diff_path.display()))?;
+
     fs::write(prompt_path, prompt)
         .with_context(|| format!("Failed to write prompt file: {}", prompt_path.display()))?;
+
     let archived_diff_path = artifact_dir.join("diff.patch");
     let archived_prompt_path = artifact_dir.join("prompt.txt");
+
     fs::copy(diff_path, &archived_diff_path).with_context(|| {
         format!(
             "Failed to archive diff from {} to {}",
@@ -142,6 +164,7 @@ fn store_review_artifacts(
             archived_diff_path.display()
         )
     })?;
+
     fs::copy(prompt_path, &archived_prompt_path).with_context(|| {
         format!(
             "Failed to archive prompt from {} to {}",
@@ -149,5 +172,6 @@ fn store_review_artifacts(
             archived_prompt_path.display()
         )
     })?;
+
     Ok((archived_diff_path, archived_prompt_path))
 }
