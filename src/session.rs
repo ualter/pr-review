@@ -112,7 +112,7 @@ pub fn run_interactive_session(
             continue;
         }
 
-        if matches!(user_question, "/exit" | "exit" | "quit") {
+        if matches!(user_question, "/exit") {
             println!("{LINE}");
             println!(
                 "{}Conversation saved to:{} {}",
