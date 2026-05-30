@@ -9,7 +9,7 @@ use std::{
 use crate::{
     artifacts::run_ai_tool,
     cli::{AiTool, ReviewInput},
-    markdown_viewer::open_markdown_viewer,
+    markdown_viewer::{open_markdown_viewer, print_markdown_document},
     ui::{
         print_interactive_help, start_spinner, BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET,
         YELLOW, YELLOW_BOLD,
@@ -137,15 +137,33 @@ pub fn run_interactive_session(
                 )?;
                 continue;
             }
+            "/summary-print" => {
+                print_markdown_document(
+                    "Conversation Summary",
+                    &artifact_dir.join("conversation-summary.md"),
+                )?;
+                continue;
+            }
 
             "/review" => {
                 open_markdown_viewer("🧠 Review Summary", &artifact_dir.join("review.md"))?;
+                continue;
+            }
+            "/review-print" => {
+                print_markdown_document("Review Summary", &artifact_dir.join("review.md"))?;
                 continue;
             }
 
             "/last" => {
                 open_markdown_viewer(
                     "💬 Last Conversation",
+                    &artifact_dir.join("conversation.md"),
+                )?;
+                continue;
+            }
+            "/last-print" => {
+                print_markdown_document(
+                    "Last Conversation",
                     &artifact_dir.join("conversation.md"),
                 )?;
                 continue;

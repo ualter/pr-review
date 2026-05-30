@@ -1,3 +1,4 @@
+use crate::ui::{BLACK_BOLD, LINE, RESET, YELLOW_BOLD};
 use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -13,6 +14,7 @@ use ratatui::{
     Terminal,
 };
 use std::{fs, io, path::Path};
+use termimad::MadSkin;
 
 pub fn open_markdown_viewer(title: &str, path: &Path) -> Result<()> {
     let markdown = fs::read_to_string(path)
@@ -235,15 +237,6 @@ fn flush_line_styled(lines: &mut Vec<Line<'static>>, current: &mut String, style
     current.clear();
 }
 
-fn heading_prefix(level: Option<HeadingLevel>) -> String {
-    match level {
-        Some(HeadingLevel::H1) => "# ".to_string(),
-        Some(HeadingLevel::H2) => "## ".to_string(),
-        Some(HeadingLevel::H3) => "### ".to_string(),
-        _ => "#### ".to_string(),
-    }
-}
-
 fn section_style(title: &str) -> Option<(String, Style)> {
     let normalized = title.to_lowercase();
 
@@ -357,4 +350,24 @@ fn section_label(title: &str, label: &str) -> String {
         Some(number) => format!("{number} {label}"),
         None => label.to_string(),
     }
+}
+
+pub fn print_markdown_document(title: &str, path: &Path) -> Result<()> {
+    let markdown = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read markdown file: {}", path.display()))?;
+
+    let skin = MadSkin::default();
+
+    println!();
+    println!("{LINE}");
+    println!("{YELLOW_BOLD}📄 {title}{RESET}");
+    println!("{LINE}");
+
+    skin.print_text(&markdown);
+
+    println!("{LINE}");
+    println!("{BLACK_BOLD}End of document. Use your terminal scrollback to review above.{RESET}");
+    println!("{LINE}");
+
+    Ok(())
 }

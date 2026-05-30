@@ -170,21 +170,30 @@ pub fn print_interactive_help(tool: &AiTool) {
     println!();
     println!("{GREEN_BOLD}Available Commands:{RESET}");
     println!(
-        "  {YELLOW}❓ /help{RESET}      {BLACK_BOLD}Show available commands and shortcuts{RESET}"
+        "  {YELLOW}❓ /help{RESET}          {BLACK_BOLD}Show available commands and shortcuts{RESET}"
     );
     println!(
-    "  {YELLOW}📋 /summary{RESET}   {BLACK_BOLD}Show the AI-generated conversation summary{RESET}"
+    "  {YELLOW}📋 /summary{RESET}       {BLACK_BOLD}Show the AI-generated conversation summary{RESET}"
 );
     println!(
-    "  {YELLOW}🧠 /review{RESET}    {BLACK_BOLD}Show the original PR/commit review results{RESET}"
+    "  {YELLOW}📋 /summary-print{RESET} {BLACK_BOLD}Print the AI-generated conversation summary{RESET}"
 );
     println!(
-    "  {YELLOW}💬 /last{RESET}      {BLACK_BOLD}Show the latest interactive conversation{RESET}"
+    "  {YELLOW}🧠 /review{RESET}        {BLACK_BOLD}Show the original PR/commit review results{RESET}"
 );
     println!(
-        "  {YELLOW}🔄 /full{RESET}      {BLACK_BOLD}Restart the review session from scratch{RESET}"
+    "  {YELLOW}🧠 /review-print{RESET}  {BLACK_BOLD}Print the original PR/commit review results{RESET}"
+);
+    println!(
+    "  {YELLOW}💬 /last{RESET}          {BLACK_BOLD}Show the latest interactive conversation{RESET}"
+);
+    println!(
+        "  {YELLOW}💬 /last-print{RESET}    {BLACK_BOLD}Print the latest interactive conversation{RESET}"
     );
-    println!("  {YELLOW}🚪 /exit{RESET}      {BLACK_BOLD}Save the session and exit{RESET}");
+    println!(
+        "  {YELLOW}🔄 /full{RESET}          {BLACK_BOLD}Restart the review session from scratch{RESET}"
+    );
+    println!("  {YELLOW}🚪 /exit{RESET}          {BLACK_BOLD}Save the session and exit{RESET}");
     println!();
 
     println!("{BLACK_BOLD}Anything else will be sent directly to the AI assistant {BLACK_BOLD}({}).{RESET}", tool.display_name());
