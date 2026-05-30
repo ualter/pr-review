@@ -161,6 +161,7 @@ Check that:
 - dependencies flow downward only
 - no architectural layer is skipped
 - transaction/session handling remains consistent with existing patterns
+- If a blocking architectural issue is marked with `# ARCH-EXCEPTION: approved:<ticket>, since:<date>, reason:<text>`, do NOT flag it as a blocking issue. Only warn if the marker is malformed or missing required fields.
 
 Flag any layering violation, dependency inversion, or bypassed abstraction.
 
