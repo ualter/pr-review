@@ -180,3 +180,28 @@ pub fn existing_review_artifact_dir(review_name: &str) -> Result<PathBuf> {
 
     Ok(dir)
 }
+
+pub fn list_review_sessions() -> Result<Vec<PathBuf>> {
+    let reports_dir = reports_archive_dir()?;
+
+    if !reports_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut sessions = fs::read_dir(&reports_dir)
+        .with_context(|| {
+            format!(
+                "Failed to read reports directory: {}",
+                reports_dir.display()
+            )
+        })?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .filter(|path| path.join("conversation.md").exists())
+        .collect::<Vec<_>>();
+
+    sessions.sort();
+
+    Ok(sessions)
+}

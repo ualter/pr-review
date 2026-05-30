@@ -39,8 +39,20 @@ pub enum Commands {
         common: CommonArgs,
     },
 
-    /// Resume an existing interactive review session
+    /// Manage interactive review sessions
     Session {
+        #[command(subcommand)]
+        command: SessionCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SessionCommand {
+    /// List existing review sessions
+    List,
+
+    /// Resume an existing interactive review session
+    Resume {
         /// Existing review name, e.g. codecommit-pr-4663 or commit-abc123
         review_name: String,
 

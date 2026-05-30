@@ -211,3 +211,24 @@ pub fn print_startup_banner() {
     println!("{BLACK_BOLD}AI-Assisted Engineering Review CLI{RESET}");
     println!("{LINE}");
 }
+
+pub fn print_sessions(sessions: &[std::path::PathBuf]) {
+    println!("{LINE}");
+    println!("{YELLOW_BOLD}Existing review sessions{RESET}");
+    println!("{LINE}");
+
+    if sessions.is_empty() {
+        println!("{BLACK_BOLD}No resumable sessions found.{RESET}");
+        println!("{LINE}");
+        return;
+    }
+
+    for session in sessions {
+        if let Some(name) = session.file_name().and_then(|n| n.to_str()) {
+            println!("  {GREEN_BOLD}{name}{RESET}");
+            println!("    {BLACK_BOLD}Resume:{RESET} pr-review session resume {name} --ai codex");
+        }
+    }
+
+    println!("{LINE}");
+}

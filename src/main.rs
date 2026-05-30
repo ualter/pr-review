@@ -17,6 +17,8 @@ use review::{build_prompt, review_commit, review_pr};
 use session::resume_interactive_session;
 use ui::{print_artifacts, print_header, print_report, start_spinner, GREEN, RESET, YELLOW};
 
+use crate::{artifacts::list_review_sessions, cli::SessionCommand, ui::print_sessions};
+
 const TESTING: bool = false;
 
 fn main() -> Result<()> {
@@ -34,18 +36,19 @@ fn main() -> Result<()> {
             Ok(())
         }
 
-        Commands::Session { review_name, ai } => {
-            let artifact_dir = existing_review_artifact_dir(&review_name)?;
+        Commands::Session { command } => match command {
+            SessionCommand::List => {
+                let sessions = list_review_sessions()?;
+                print_sessions(&sessions);
+                Ok(())
+            }
 
-            resume_interactive_session(&artifact_dir, &ai)?;
-
-            println!(
-                "{GREEN}Done in {:.2}s{RESET}",
-                start.elapsed().as_secs_f64()
-            );
-
-            Ok(())
-        }
+            SessionCommand::Resume { review_name, ai } => {
+                let artifact_dir = existing_review_artifact_dir(&review_name)?;
+                resume_interactive_session(&artifact_dir, &ai)?;
+                Ok(())
+            }
+        },
 
         Commands::Pr { pr_id, common } => {
             let input = review_pr(&pr_id, &common)?;
