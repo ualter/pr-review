@@ -13,6 +13,9 @@ help:  ## Display this help
 build:  ## Build the project
 	cargo build --release
 
+doctor:  ## Check local environment and external CLI dependencies
+	cargo run --release doctor
+
 review-pr: ## Review a CodeCommit Pull Request  (usage: make review-pr AI=copilot|codex)
 	cargo run --release pr 4663 --ai $(AI) --repo-path $(repo_path)
 

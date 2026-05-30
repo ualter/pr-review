@@ -17,6 +17,9 @@ pub struct SessionArgs {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Check local environment and external CLI dependencies
+    Doctor,
+
     /// Review an AWS CodeCommit Pull Request
     Pr {
         pr_id: String,

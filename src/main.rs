@@ -1,5 +1,6 @@
 mod artifacts;
 mod cli;
+mod doctor;
 mod review;
 mod session;
 mod ui;
@@ -23,6 +24,11 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Doctor => {
+            doctor::run_doctor(std::path::Path::new("."))?;
+            Ok(())
+        }
+
         Commands::Session { review_name, ai } => {
             let artifact_dir = existing_review_artifact_dir(&review_name)?;
 
