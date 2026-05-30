@@ -179,62 +179,35 @@ pub fn print_interactive_help(tool: &AiTool) {
 
 pub fn print_startup_banner() {
     let frames = [
-        r#"
-  PR-REVIEW
-"#,
-        r#"
- ✨PR-REVIEW
-"#,
-        r#"
-  P✨R-REVIEW
-"#,
-        r#"
-  PR✨-REVIEW
-"#,
-        r#"
-  PR✨-REVIEW
-"#,
-        r#"
-  PR-✨REVIEW
-"#,
-        r#"
-  PR-R✨EVIEW
-"#,
-        r#"
-  PR-RE✨VIEW
-"#,
-        r#"
-  PR-REV✨IEW
-"#,
-        r#"
-  PR-REVI✨EW
-"#,
-        r#"
-  PR-REVIE✨W
-"#,
-        r#"
-  PR-REVIEW✨
-"#,
-        r#"
-  PR-REVIEW ✨
-"#,
-        r#"
-  👉PR-REVIEW ✨
-"#,
-        r#"
-   👉PR-REVIEW✨
-"#,
-        r#"
-   👉 PR-REVIEW✨
-"#,
-        r#"
-   👉 PR-REVIEW ✨
-"#,
+        include_str!("../assets/banner_01/frame_01.txt"),
+        include_str!("../assets/banner_01/frame_02.txt"),
+        include_str!("../assets/banner_01/frame_03.txt"),
+        include_str!("../assets/banner_01/frame_04.txt"),
+        include_str!("../assets/banner_01/frame_05.txt"),
+        include_str!("../assets/banner_01/frame_06.txt"),
+        include_str!("../assets/banner_01/frame_07.txt"),
+        include_str!("../assets/banner_01/frame_08.txt"),
+        include_str!("../assets/banner_01/frame_09.txt"),
+        include_str!("../assets/banner_01/frame_10.txt"),
+        include_str!("../assets/banner_01/frame_11.txt"),
+        include_str!("../assets/banner_01/frame_12.txt"),
+        include_str!("../assets/banner_01/frame_13.txt"),
+        include_str!("../assets/banner_01/frame_14.txt"),
+        include_str!("../assets/banner_01/frame_15.txt"),
+        include_str!("../assets/banner_01/frame_16.txt"),
+        include_str!("../assets/banner_01/frame_17.txt"),
     ];
 
+    print!("\x1b[H");
+    print!("\x1b[2J");
+
     for frame in frames {
-        print!("\x1b[2J\x1b[H"); // clear screen + move cursor home
+        print!("\x1b[H"); // cursor home
         println!("{GREEN_BOLD}{frame}{RESET}");
-        std::thread::sleep(std::time::Duration::from_millis(120));
+        let _ = std::io::stdout().flush();
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
+
+    println!("{BLACK_BOLD}AI-Assisted Engineering Review CLI{RESET}");
+    println!("{LINE}");
 }
