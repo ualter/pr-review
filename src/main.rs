@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::{fs, path::PathBuf, sync::atomic::Ordering, time::Instant};
 
-use artifacts::{review_artifact_dir, run_ai_tool};
+use artifacts::{review_artifact_dir, run_ai_tool, write_review_meta};
 use cli::{Cli, Commands};
 use review::{build_prompt, review_commit, review_pr};
 use ui::{print_artifacts, print_header, print_report, start_spinner, GREEN, RESET, YELLOW};
@@ -46,7 +46,9 @@ fn main() -> Result<()> {
     );
 
     let (archived_diff_path, archived_prompt_path) =
-        store_review_artifacts(input, prompt, &diff_path, &prompt_path, &artifact_dir)?;
+        store_review_artifacts(&input, &prompt, &diff_path, &prompt_path, &artifact_dir)?;
+
+    write_review_meta(&artifact_dir, &input, &common.ai)?;
 
     print_artifacts(
         &diff_path,
@@ -106,15 +108,15 @@ fn main() -> Result<()> {
 }
 
 fn store_review_artifacts(
-    input: cli::ReviewInput,
-    prompt: String,
+    input: &cli::ReviewInput,
+    prompt: &str,
     diff_path: &PathBuf,
     prompt_path: &PathBuf,
     artifact_dir: &PathBuf,
 ) -> Result<(PathBuf, PathBuf), anyhow::Error> {
     fs::write(diff_path, &input.diff)
         .with_context(|| format!("Failed to write diff file: {}", diff_path.display()))?;
-    fs::write(prompt_path, &prompt)
+    fs::write(prompt_path, prompt)
         .with_context(|| format!("Failed to write prompt file: {}", prompt_path.display()))?;
     let archived_diff_path = artifact_dir.join("diff.patch");
     let archived_prompt_path = artifact_dir.join("prompt.txt");

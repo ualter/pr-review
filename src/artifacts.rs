@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use chrono::Local;
 use std::{
     env, fs,
     io::Write,
@@ -6,7 +7,25 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::cli::AiTool;
+use crate::cli::{AiTool, ReviewInput};
+
+pub fn write_review_meta(artifact_dir: &Path, input: &ReviewInput, tool: &Option<AiTool>) -> Result<()> {
+    let timestamp = Local::now().to_rfc3339();
+    let tool_name = tool.as_ref().map(|t| t.display_name()).unwrap_or("none");
+
+    let meta = serde_json::json!({
+        "timestamp":  timestamp,
+        "tool":       tool_name,
+        "repository": input.repository,
+        "source":     input.source,
+        "target":     input.target,
+        "review_ref": input.review_ref,
+    });
+
+    let meta_path = artifact_dir.join("meta.json");
+    fs::write(&meta_path, serde_json::to_string_pretty(&meta)?)
+        .with_context(|| format!("Failed to write meta file: {}", meta_path.display()))
+}
 
 // - copilot takes the prompt as a CLI argument: copilot -p "...prompt..." → run_command is enough
 // - codex review - the - flag means "read from stdin" → needs run_command_with_stdin to pipe the prompt in
