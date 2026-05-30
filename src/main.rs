@@ -222,7 +222,7 @@ fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Re
 
         session::prepare_session_artifacts(&artifact_dir, &input, &review, tool)?;
 
-        if common.interactive {
+        if !common.no_interactive {
             session::run_interactive_session(&input, &artifact_dir, tool)?;
         }
     }

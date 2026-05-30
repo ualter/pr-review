@@ -90,10 +90,9 @@ pub struct CommonArgs {
     #[arg(long, value_name = "TOOL")]
     pub ai: Option<AiTool>,
 
-    /// Continue into an interactive AI chat after the review
-    /// pr-review pr 4663 --ai codex --interactive
+    /// Return to the shell after the review instead of entering interactive chat
     #[arg(long)]
-    pub interactive: bool,
+    pub no_interactive: bool,
 }
 
 #[derive(Clone, ValueEnum, Debug)]

@@ -835,7 +835,7 @@ fn display_no_session_warning(artifact_dir: &Path, missing_file: &str) {
 
     println!();
     println!(
-        "  {}pr-review pr <PR_NUMBER> --ai codex --interactive{}",
+        "  {}pr-review pr <PR_NUMBER> --ai codex{}",
         BLUE_BOLD, RESET
     );
 

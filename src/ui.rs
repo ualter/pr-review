@@ -20,6 +20,7 @@ use std::{
 pub const GREEN: &str = "\x1b[32m";
 pub const GREEN_BOLD: &str = "\x1b[1;32m";
 pub const BLACK_BOLD: &str = "\x1b[1;30m";
+pub const BLUE: &str = "\x1b[34m";
 pub const BLUE_BOLD: &str = "\x1b[1;34m";
 pub const YELLOW: &str = "\x1b[33m";
 pub const YELLOW_BOLD: &str = "\x1b[1;33m";
