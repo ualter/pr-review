@@ -5,9 +5,10 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::{
     env, fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    thread,
 };
 
 use crate::cli::{AiTool, ReviewInput};
@@ -36,6 +37,11 @@ pub struct ReviewMeta {
 pub struct LoadedReviewMeta {
     pub meta: ReviewMeta,
     pub warning: Option<String>,
+}
+
+pub struct AiRunResult {
+    pub output: String,
+    pub streamed: bool,
 }
 
 pub fn write_review_meta(
@@ -208,6 +214,61 @@ pub fn run_ai_tool(tool: &AiTool, prompt: &str) -> Result<String> {
     }
 }
 
+pub fn run_ai_tool_streaming<F>(tool: &AiTool, prompt: &str, on_chunk: F) -> Result<AiRunResult>
+where
+    F: FnMut(&str),
+{
+    match tool {
+        AiTool::Copilot => {
+            if prompt.len() > MAX_COPILOT_PROMPT_BYTES {
+                eprintln!(
+    "\n{YELLOW}⚠️  Large PR detected ({}) bytes.{RESET}\n\
+{BLACK_BOLD}Copilot may struggle with very large reviews or hit prompt limits.{RESET}\n\
+{BLUE_BOLD}Tip:{RESET} For large PRs, consider using {YELLOW_BOLD}--ai codex{RESET} for better reliability and context handling.\n",
+    prompt.len()
+);
+                let prompt_file = tempfile::NamedTempFile::new()?;
+                std::fs::write(prompt_file.path(), prompt)?;
+
+                let small_prompt = format!(
+                    "Read and follow the complete PR review prompt in this file:\n\n{}\n\nTreat that file as the full instructions and source of truth.",
+                    prompt_file.path().display()
+                );
+
+                Ok(AiRunResult {
+                    output: run_command_streaming(
+                        Path::new("."),
+                        "copilot",
+                        &["-p", &small_prompt],
+                        on_chunk,
+                    )?,
+                    streamed: true,
+                })
+            } else {
+                Ok(AiRunResult {
+                    output: run_command_streaming(
+                        Path::new("."),
+                        "copilot",
+                        &["-p", prompt],
+                        on_chunk,
+                    )?,
+                    streamed: true,
+                })
+            }
+        }
+        AiTool::Codex => Ok(AiRunResult {
+            output: run_command_with_stdin_streaming(
+                Path::new("."),
+                "codex",
+                &["review", "-"],
+                prompt,
+                on_chunk,
+            )?,
+            streamed: true,
+        }),
+    }
+}
+
 /// Spawns a command and writes `input` to its stdin, capturing stdout.
 fn run_command_with_stdin(
     repo_path: &Path,
@@ -244,6 +305,158 @@ fn run_command_with_stdin(
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn run_command_streaming<F>(
+    repo_path: &Path,
+    program: &str,
+    args: &[&str],
+    mut on_chunk: F,
+) -> Result<String>
+where
+    F: FnMut(&str),
+{
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(repo_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("Failed to spawn: {program} {}", args.join(" ")))?;
+
+    let Some(mut stdout) = child.stdout.take() else {
+        return Err(anyhow!("Failed to capture stdout for: {program} {}", args.join(" ")));
+    };
+
+    let stderr_handle = child.stderr.take().map(|mut stderr| {
+        thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = stderr.read_to_end(&mut buffer);
+            buffer
+        })
+    });
+
+    let mut collected = String::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        let bytes_read = stdout
+            .read(&mut buffer)
+            .with_context(|| format!("Failed to read stdout from: {program}"))?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        let chunk = String::from_utf8_lossy(&buffer[..bytes_read]);
+        collected.push_str(&chunk);
+        on_chunk(&chunk);
+    }
+
+    let status = child
+        .wait()
+        .with_context(|| format!("Failed to wait for: {program}"))?;
+
+    let stderr = match stderr_handle {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| anyhow!("Stderr reader thread panicked for: {program}"))?,
+        None => Vec::new(),
+    };
+
+    if !status.success() {
+        return Err(anyhow!(
+            "Command failed: {} {}\n{}",
+            program,
+            args.join(" "),
+            String::from_utf8_lossy(&stderr)
+        ));
+    }
+
+    Ok(collected)
+}
+
+fn run_command_with_stdin_streaming<F>(
+    repo_path: &Path,
+    program: &str,
+    args: &[&str],
+    input: &str,
+    mut on_chunk: F,
+) -> Result<String>
+where
+    F: FnMut(&str),
+{
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(repo_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("Failed to spawn: {program} {}", args.join(" ")))?;
+
+    let Some(mut stdin) = child.stdin.take() else {
+        return Err(anyhow!("Failed to open stdin for: {program} {}", args.join(" ")));
+    };
+
+    let input_owned = input.to_string();
+    let stdin_handle = thread::spawn(move || -> Result<()> {
+        stdin
+            .write_all(input_owned.as_bytes())
+            .context("Failed to write prompt to stdin")?;
+        Ok(())
+    });
+
+    let Some(mut stdout) = child.stdout.take() else {
+        return Err(anyhow!("Failed to capture stdout for: {program} {}", args.join(" ")));
+    };
+
+    let stderr_handle = child.stderr.take().map(|mut stderr| {
+        thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = stderr.read_to_end(&mut buffer);
+            buffer
+        })
+    });
+
+    let mut collected = String::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        let bytes_read = stdout
+            .read(&mut buffer)
+            .with_context(|| format!("Failed to read stdout from: {program}"))?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        let chunk = String::from_utf8_lossy(&buffer[..bytes_read]);
+        collected.push_str(&chunk);
+        on_chunk(&chunk);
+    }
+
+    stdin_handle
+        .join()
+        .map_err(|_| anyhow!("Stdin writer thread panicked for: {program}"))??;
+
+    let status = child
+        .wait()
+        .with_context(|| format!("Failed to wait for: {program}"))?;
+
+    let stderr = match stderr_handle {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| anyhow!("Stderr reader thread panicked for: {program}"))?,
+        None => Vec::new(),
+    };
+
+    if !status.success() {
+        return Err(anyhow!(
+            "Command failed: {} {}\n{}",
+            program,
+            args.join(" "),
+            String::from_utf8_lossy(&stderr)
+        ));
+    }
+
+    Ok(collected)
 }
 
 pub fn run_command(repo_path: &Path, program: &str, args: &[&str]) -> Result<String> {

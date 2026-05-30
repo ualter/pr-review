@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    artifacts::{load_review_meta, run_ai_tool},
+    artifacts::{load_review_meta, run_ai_tool, run_ai_tool_streaming},
     cli::{AiTool, ReviewInput},
     markdown_viewer::{
         open_markdown_text, open_markdown_viewer, open_markdown_viewer_at_end,
@@ -248,10 +248,31 @@ fn process_user_question(
     session.append_user_message(actual_question)?;
     let context = select_context_for_question(session, input, actual_question, force_full_diff)?;
     let prompt = build_chat_prompt(input, actual_question, &context);
-    let spinner = start_spinner(format!("{} is thinking...", tool.display_name()));
-    let answer = run_ai_tool(tool, &prompt)?;
-    spinner.stop();
-    println!("\n{}\n", answer);
+    let mut spinner = Some(start_spinner(format!("{} is thinking...", tool.display_name())));
+    let mut streamed_anything = false;
+    let run_result = run_ai_tool_streaming(tool, &prompt, |chunk| {
+        if let Some(active_spinner) = spinner.take() {
+            active_spinner.stop();
+            println!();
+        }
+
+        streamed_anything = true;
+        print!("{chunk}");
+        let _ = io::stdout().flush();
+    })?;
+
+    if let Some(active_spinner) = spinner.take() {
+        active_spinner.stop();
+    } else if streamed_anything {
+        println!();
+    }
+
+    let answer = run_result.output;
+    if !run_result.streamed {
+        println!("\n{}\n", answer);
+    } else {
+        println!();
+    }
     session.append_ai_message(&answer)?;
     update_conversation_summary(session, tool)?;
     Ok(())

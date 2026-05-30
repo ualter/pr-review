@@ -416,3 +416,84 @@ The objective is:
 ```text
 "Use AI to augment senior engineering review workflows"
 ```
+
+---
+
+# Commands that are *“cheap”* vs *“expensive”* in this tool
+
+### **Cheap**
+
+These do not call the AI at all:
+- `pr-review session list`
+- `pr-review session resume <name> --ai ...` by itself, until you ask a follow-up
+- `/help`
+- `/summary`
+- `/summary-print`
+- `/review`
+- `/review-print`
+- `/review-summary`
+- `/review-summary-print`
+- `/last`
+- `/last N`
+- `/last-print`
+- `/last-print N`
+- `/exit`
+- `doctor`
+- `banner`
+
+These are just local file reads, local UI, or session loading.
+
+### **Moderate**
+
+These make AI calls, but usually with smaller context:
+- asking a normal follow-up question inside `--interactive`
+- resuming a session and then asking a targeted question like “what about `foo.rs`?”
+- summary generation after each follow-up
+
+Why moderate:
+- the follow-up prompt uses:
+  - saved review summary
+  - saved conversation summary
+  - selected diff chunk
+- then the app makes one more call to refresh `conversation-summary.md`
+
+So one user question in interactive mode is actually usually:
+1. answer the question
+2. update the conversation summary
+
+That means 2 AI calls.
+
+### **Expensive**
+
+These are the token-heavy paths:
+- `pr-review pr 4670 --ai ...`
+- `pr-review commit <sha> --ai ...`
+- `pr-review pr 4670 --ai ... --interactive`
+- `/full`
+
+Why:
+- fresh PR/commit review sends the big review prompt plus the full diff
+- `/full` sends the whole diff again inside the follow-up flow
+
+###  **Most Expensive Pattern**
+
+The worst token pattern is:
+- rerun `pr-review pr 4670 --ai ...` repeatedly instead of resuming
+- then use `/full` often
+- on a large PR
+
+That repeatedly pays for the whole diff.
+
+**Practical Guidance**
+
+Use this pattern to save tokens:
+1. Run the full review once:
+   - `pr-review pr 4670 --ai copilot --interactive`
+2. Later resume it:
+   - `pr-review session resume codecommit-pr-4670 --ai copilot`
+3. Ask focused questions
+4. Avoid `/full` unless you really need to recheck the whole diff
+
+So the cheapest useful workflow is:
+- one full review
+- many focused follow-ups through resume

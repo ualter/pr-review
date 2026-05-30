@@ -10,12 +10,13 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::{
     fs,
+    io::{self, Write},
     path::{Path, PathBuf},
     time::Instant,
 };
 
 use artifacts::{
-    existing_review_artifact_dir, review_artifact_dir, run_ai_tool, write_review_meta,
+    existing_review_artifact_dir, review_artifact_dir, run_ai_tool_streaming, write_review_meta,
 };
 use cli::{Cli, Commands, CommonArgs, ReviewInput};
 use review::{build_prompt, review_commit, review_pr};
@@ -134,16 +135,29 @@ fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Re
             prompt_arg
         };
 
-        let spinner_msg: &'static str =
-            Box::leak(format!("{} is reviewing...", tool.display_name()).into_boxed_str());
+        let mut spinner_handler = Some(start_spinner(format!(
+            "{} is reviewing...",
+            tool.display_name()
+        )));
+        let mut streamed_anything = false;
 
-        let spinner_handler = start_spinner(spinner_msg);
+        let review = run_ai_tool_streaming(tool, &prompt_arg, |chunk| {
+            if let Some(active_spinner) = spinner_handler.take() {
+                active_spinner.stop();
+                println!();
+            }
 
-        let result = run_ai_tool(tool, &prompt_arg);
+            streamed_anything = true;
+            print!("{chunk}");
+            let _ = io::stdout().flush();
+        })?
+        .output;
 
-        spinner_handler.stop();
-
-        let review = result?;
+        if let Some(active_spinner) = spinner_handler.take() {
+            active_spinner.stop();
+        } else if streamed_anything {
+            println!();
+        }
 
         fs::write(&report_path, &review)
             .with_context(|| format!("Failed to write report file: {}", report_path.display()))?;
