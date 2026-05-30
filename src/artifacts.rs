@@ -1,3 +1,4 @@
+use crate::ui::{BLACK_BOLD, BLUE_BOLD, RESET, YELLOW, YELLOW_BOLD};
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
 use std::{
@@ -48,11 +49,14 @@ pub fn run_ai_tool(tool: &AiTool, prompt: &str) -> Result<String> {
     match tool {
         AiTool::Copilot => {
             if prompt.len() > MAX_COPILOT_PROMPT_BYTES {
+                // Copilot has a hard limit on prompt size, and performance degrades well before that limit. For very large PRs,
+                // we write the prompt to a temporary file and pass instructions to read from that file instead.
                 eprintln!(
-                    "[pr-review] Warning: The prompt is very large ({} bytes). For big PRs, consider using 'codex' instead of 'copilot' for better results.",
-                    prompt.len()
-                );
-
+    "\n{YELLOW}⚠️  Large PR detected ({}) bytes.{RESET}\n\
+{BLACK_BOLD}Copilot may struggle with very large reviews or hit prompt limits.{RESET}\n\
+{BLUE_BOLD}Tip:{RESET} For large PRs, consider using {YELLOW_BOLD}--ai codex{RESET} for better reliability and context handling.\n",
+    prompt.len()
+);
                 let prompt_file = tempfile::NamedTempFile::new()?;
                 std::fs::write(prompt_file.path(), prompt)?;
 
@@ -63,6 +67,7 @@ pub fn run_ai_tool(tool: &AiTool, prompt: &str) -> Result<String> {
 
                 run_command(Path::new("."), "copilot", &["-p", &small_prompt])
             } else {
+                // For smaller prompts, we can pass directly through the CLI argument as intended.
                 run_command(Path::new("."), "copilot", &["-p", prompt])
             }
         }
