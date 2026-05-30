@@ -9,7 +9,9 @@ use std::{
 use crate::{
     artifacts::run_ai_tool,
     cli::{AiTool, ReviewInput},
-    ui::{print_interactive_help, BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW_BOLD},
+    ui::{
+        print_interactive_help, BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW, YELLOW_BOLD,
+    },
 };
 
 pub struct SelectedContext {
@@ -558,41 +560,77 @@ pub fn resume_interactive_session(artifact_dir: &Path, tool: &AiTool) -> Result<
     let diff_by_file_dir = artifact_dir.join("diff-by-file");
 
     if !conversation_path.exists() {
-        return Err(anyhow!(
-            "No conversation.md found. This review does not have an interactive session yet: {}",
-            conversation_path.display()
-        ));
+        display_no_session_warning(artifact_dir, "conversation.md");
+        std::process::exit(0);
     }
 
     if !review_summary_path.exists() {
-        return Err(anyhow!(
-            "No review-summary.md found. This review is missing session artifacts: {}",
-            review_summary_path.display()
-        ));
+        display_no_session_warning(artifact_dir, "review-summary.md");
+        std::process::exit(0);
     }
 
     if !conversation_summary_path.exists() {
-        return Err(anyhow!(
-            "No conversation-summary.md found. This review is missing session artifacts: {}",
-            conversation_summary_path.display()
-        ));
+        display_no_session_warning(artifact_dir, "conversation-summary.md");
+        std::process::exit(0);
     }
 
     if !diff_by_file_dir.exists() {
-        return Err(anyhow!(
-            "No diff-by-file directory found. This review is missing split diff artifacts: {}",
-            diff_by_file_dir.display()
-        ));
+        display_no_session_warning(artifact_dir, "diff-by-file");
+        std::process::exit(0);
     }
 
     println!(
-        "Resuming interactive review session from: {}",
+        "🚀 Resuming interactive review session from: {}",
         artifact_dir.display()
     );
 
     let input = load_review_input_from_session(artifact_dir)?;
 
     run_interactive_session(&input, artifact_dir, tool)
+}
+
+fn display_no_session_warning(artifact_dir: &Path, missing_file: &str) {
+    println!("{LINE}");
+    println!(
+        "{} ⚠  No interactive session found for this review.{}",
+        YELLOW_BOLD, RESET
+    );
+
+    println!();
+    println!("{}Review:{} {}", BLUE_BOLD, RESET, artifact_dir.display());
+
+    println!();
+    println!("👉 {}Missing file:{} {}", YELLOW, missing_file, RESET);
+
+    println!();
+    println!(
+        "{}This PR/commit review was generated without an interactive AI session.{}",
+        BLACK_BOLD, RESET
+    );
+
+    println!(
+        "{}Start a new interactive session first using:{}",
+        GREEN_BOLD, RESET
+    );
+
+    println!();
+    println!(
+        "  {}pr-review pr <PR_NUMBER> --ai codex --interactive{}",
+        BLUE_BOLD, RESET
+    );
+
+    println!();
+    println!(
+        "{}Then you can resume the conversation later from the saved artifacts.{}",
+        BLACK_BOLD, RESET
+    );
+
+    println!("{LINE}");
+
+    println!(
+        "{}👋 Exiting. Please start a new interactive session to continue.{}",
+        YELLOW_BOLD, RESET
+    );
 }
 
 fn load_review_input_from_session(artifact_dir: &Path) -> Result<ReviewInput> {
