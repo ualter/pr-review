@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::artifacts::{repo_name, run_command};
 use crate::cli::{CommonArgs, ReviewInput};
+use crate::prompt_profile::PromptProfile;
 use crate::scm::bitbucket::BitbucketProvider;
 use crate::scm::codecommit::CodeCommitProvider;
 use crate::scm::{ScmKind, ScmProvider};
@@ -97,53 +98,71 @@ pub fn review_commit(sha: &str, common: &CommonArgs) -> Result<ReviewInput> {
     })
 }
 
-pub fn build_prompt(input: &ReviewInput) -> String {
+pub fn build_prompt(input: &ReviewInput, profile: &PromptProfile) -> String {
+    let out_of_scope = if profile.out_of_scope.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "Do not review unrelated existing code unless:\n{}\n",
+            profile
+                .out_of_scope
+                .iter()
+                .map(|item| format!("- {item}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+
+    let unchanged_code_guidance = profile
+        .unchanged_code_guidance
+        .as_deref()
+        .unwrap_or_default();
+
+    let architecture_section = if profile.architecture_summary.is_some()
+        || !profile.architecture_rules.is_empty()
+    {
+        format!(
+            "Architecture rules:\n{}\n\nCheck that:\n{}\n",
+            profile
+                .architecture_summary
+                .as_deref()
+                .unwrap_or("No architecture summary configured."),
+            profile
+                .architecture_rules
+                .iter()
+                .map(|item| format!("- {item}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    } else {
+        String::new()
+    };
+
+    let review_focus = profile
+        .review_focus
+        .iter()
+        .map(|item| format!("- {item}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let extra_instructions = profile.extra_instructions.as_deref().unwrap_or_default();
+
     format!(
         r#"{scope}
 
-Do not review unrelated existing code unless:
-- the new changes introduce risk into that area
-- the modified code depends on fragile existing behavior
-- there is an obvious regression/security concern directly connected to the diff
+{out_of_scope}
 
-Assume unchanged code is out of scope unless required for understanding impact.
+{unchanged_code_guidance}
 
 Review metadata:
 {metadata}
 
-Architecture rules:
-FrontEnd -> GraphQL API resolvers/mutations -> Service -> Repository -> DB via SQLAlchemy models
-
-Check that:
-- resolvers/mutations call the Service layer only
-- resolvers/mutations do NOT call Repository classes directly
-- resolvers/mutations do NOT access SQLAlchemy models, DB sessions, or raw queries directly
-- Service layer owns business logic and orchestration
-- Repository layer owns persistence and DB access
-- dependencies flow downward only
-- no architectural layer is skipped
-- transaction/session handling remains consistent with existing patterns
-- If a blocking architectural issue is marked with `# ARCH-EXCEPTION: approved:<ticket>, since:<date>, reason:<text>`, do NOT flag it as a blocking issue. Only warn if the marker is malformed or missing required fields.
-
-Flag any layering violation, dependency inversion, or bypassed abstraction.
+{architecture_section}
 
 Focus on:
-- bugs and regressions
-- security issues
-- AWS/IAM/CDK/infrastructure risks
-- missing or weak tests
-- backward compatibility
-- maintainability
-- unclear, fragile, or overly complex design
-- risky deployment, migration, or rollback concerns
-- transaction/data consistency risks
-- authorization/authentication mistakes
-- concurrency, async, caching, or state-management risks
-- performance regressions caused by the change
+{review_focus}
 
-Do not rewrite the code yet.
-Prefer fewer high-confidence findings over many speculative comments.
-Call out only actionable findings.
+{extra_instructions}
 
 For each finding include:
 - severity: blocking or non-blocking
@@ -165,7 +184,12 @@ Diff:
 ```diff
 {diff}"#,
         scope = input.prompt_scope,
+        out_of_scope = out_of_scope.trim_end(),
+        unchanged_code_guidance = unchanged_code_guidance,
         metadata = input.metadata,
+        architecture_section = architecture_section.trim_end(),
+        review_focus = review_focus,
+        extra_instructions = extra_instructions,
         diff = input.diff,
     )
 }

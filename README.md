@@ -16,6 +16,7 @@ The tool is opinionated. It is meant to behave more like a senior engineer revie
 - Interactive follow-up chat after the initial review
 - Resume of saved sessions without regenerating the original review
 - User config in `~/.pr-review/config.toml`
+- Project-specific prompt profiles with repo-local and user-level overrides
 
 ## Requirements
 
@@ -185,6 +186,31 @@ Show the startup banner:
 pr-review banner
 ```
 
+### Prompt Commands
+
+Create user-level prompt templates for one SCM and repo:
+
+```bash
+pr-review prompt init --scm codecommit --repo my-repo
+```
+
+This creates:
+
+```text
+~/.pr-review/prompts/codecommit/default.toml
+~/.pr-review/prompts/codecommit/my-repo.toml
+```
+
+Show the final built prompt after profile resolution:
+
+```bash
+pr-review prompt show --scm codecommit --repo my-repo
+```
+
+Optional:
+
+- `--repo-path <PATH>`: include a repo-local `.pr-review/prompt.toml` in the resolution chain if present
+
 ## Review Flow
 
 ### PR review
@@ -334,6 +360,84 @@ repo = "my-repo"
 - `url`: default Bitbucket Server/Data Center base URL
 - `project`: default project key
 - `repo`: default repo slug
+
+## Prompt Profiles
+
+The review prompt is no longer a single global hardcoded policy only.
+
+`pr-review` now resolves a project-specific prompt profile and merges it onto the built-in default review policy. If no prompt profile exists, behavior stays effectively the same as before.
+
+### Resolution order
+
+Prompt profiles are resolved in this order:
+
+1. `<repo-path>/.pr-review/prompt.toml`
+2. `~/.pr-review/prompts/<scm>/<repo>.toml`
+3. `~/.pr-review/prompts/<scm>/default.toml`
+4. built-in default profile
+
+Examples:
+
+```text
+~/repos/backend/.pr-review/prompt.toml
+~/.pr-review/prompts/codecommit/datahub-backend-dev.toml
+~/.pr-review/prompts/bitbucket/PLATFORM__api.toml
+~/.pr-review/prompts/bitbucket/default.toml
+```
+
+`PLATFORM/api` becomes `PLATFORM__api` for the user-level prompt filename.
+
+### Supported fields
+
+```toml
+[architecture]
+summary = "Frontend -> API -> Service -> Repository -> DB"
+rules = [
+  "API handlers call services only",
+  "Services own orchestration",
+  "Repositories own persistence"
+]
+unchanged_code_guidance = "Only inspect unchanged code when required for impact analysis."
+
+[review]
+focus = ["bugs", "security", "tests"]
+out_of_scope = ["formatting", "style nits"]
+
+[prompt]
+extra_instructions = """
+Prefer high-confidence findings only.
+Call out risky migrations explicitly.
+"""
+```
+
+### Behavior
+
+- prompt profiles are additive overrides, not full replacements
+- if a profile defines only one section, the rest still comes from the built-in default
+- repo-local profiles override user-level profiles
+- commit review uses repo-local prompt profiles first; if none exist, it falls back to the built-in default
+- PR review can also use SCM-specific user-level prompt profiles
+
+### Practical usage
+
+Recommended user-level setup:
+
+```text
+~/.pr-review/prompts/<scm>/default.toml
+~/.pr-review/prompts/<scm>/<repo>.toml
+```
+
+Generate both with:
+
+```bash
+pr-review prompt init --scm codecommit --repo my-repo
+```
+
+If the prompt policy belongs directly to the project, repo-local profiles are still supported manually:
+
+```text
+<repo>/.pr-review/prompt.toml
+```
 
 ## Interactive Session
 

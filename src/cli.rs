@@ -33,6 +33,12 @@ pub enum Commands {
         command: ConfigCommand,
     },
 
+    /// Manage prompt profile templates
+    Prompt {
+        #[command(subcommand)]
+        command: PromptCommand,
+    },
+
     /// Check local environment and external CLI dependencies
     Doctor,
 
@@ -67,6 +73,35 @@ pub enum Commands {
 pub enum ConfigCommand {
     /// Create ~/.pr-review/config.toml if it does not exist
     Init,
+}
+
+#[derive(Subcommand)]
+pub enum PromptCommand {
+    /// Create user-level prompt profile templates under ~/.pr-review/prompts/<scm>/
+    Init {
+        /// SCM name for the prompt profile location
+        #[arg(long, value_name = "SCM")]
+        scm: ScmKind,
+
+        /// Repository name for the repo-specific prompt profile
+        #[arg(long, value_name = "REPO")]
+        repo: String,
+    },
+
+    /// Show the final built prompt for a given SCM and repository
+    Show {
+        /// SCM name for prompt resolution
+        #[arg(long, value_name = "SCM")]
+        scm: ScmKind,
+
+        /// Repository name for prompt resolution
+        #[arg(long, value_name = "REPO")]
+        repo: String,
+
+        /// Repo path used to include a repo-local .pr-review/prompt.toml if present
+        #[arg(long, default_value = ".")]
+        repo_path: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]

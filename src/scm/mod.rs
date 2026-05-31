@@ -35,6 +35,13 @@ pub trait ScmProvider {
 }
 
 impl ScmKind {
+    pub fn config_dir_name(&self) -> &'static str {
+        match self {
+            ScmKind::CodeCommit => "codecommit",
+            ScmKind::Bitbucket => "bitbucket",
+        }
+    }
+
     pub fn display_name(&self) -> &'static str {
         match self {
             ScmKind::CodeCommit => "CodeCommit",

@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod doctor;
 mod markdown_viewer;
+mod prompt_profile;
 mod review;
 mod scm;
 mod session;
@@ -20,8 +21,11 @@ use std::{
 use artifacts::{
     existing_review_artifact_dir, review_artifact_dir, run_ai_tool_streaming, write_review_meta,
 };
-use cli::{Cli, Commands, CommonArgs, ConfigCommand, ReviewInput};
+use cli::{Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
 use config::{init_user_config, load_user_config, set_user_config, ConfigInitStatus};
+use prompt_profile::{
+    init_user_prompt_profiles, resolve_prompt_profile, PromptInitStatus,
+};
 use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
 use session::resume_interactive_session;
@@ -32,6 +36,7 @@ use ui::{
 use crate::{
     artifacts::{list_review_sessions, select_review_session},
     cli::SessionCommand,
+    markdown_viewer::open_markdown_text,
     ui::{print_sessions, print_startup_banner},
 };
 
@@ -75,6 +80,54 @@ fn main() -> Result<()> {
                 }
 
                 Ok(())
+            }
+        },
+
+        Some(Commands::Prompt { command }) => match command {
+            PromptCommand::Init { scm, repo } => {
+                let result = init_user_prompt_profiles(scm, &repo)?;
+
+                match result.default_status {
+                    PromptInitStatus::Created => println!(
+                        "{GREEN_BOLD}Created default prompt profile template:{RESET} {}",
+                        result.default_path.display()
+                    ),
+                    PromptInitStatus::Unchanged => println!(
+                        "{YELLOW}Default prompt profile already exists:{RESET} {}",
+                        result.default_path.display()
+                    ),
+                }
+
+                match result.repo_status {
+                    PromptInitStatus::Created => println!(
+                        "{GREEN_BOLD}Created repo prompt profile template:{RESET} {}",
+                        result.repo_path.display()
+                    ),
+                    PromptInitStatus::Unchanged => println!(
+                        "{YELLOW}Repo prompt profile already exists:{RESET} {}",
+                        result.repo_path.display()
+                    ),
+                }
+
+                Ok(())
+            }
+
+            PromptCommand::Show {
+                scm,
+                repo,
+                repo_path,
+            } => {
+                let prompt_profile = resolve_prompt_profile(Some(scm), &repo, &repo_path)?;
+                let input = preview_review_input(scm, &repo);
+                let prompt = build_prompt(&input, &prompt_profile);
+                let markdown = format!(
+                    "# Prompt Preview\n\n- SCM: `{}`\n- Repository: `{}`\n- Repo path: `{}`\n\n```text\n{}\n```",
+                    scm.config_dir_name(),
+                    repo,
+                    repo_path.display(),
+                    prompt
+                );
+                open_markdown_text("🧾 Prompt Preview", &markdown, false)
             }
         },
 
@@ -125,14 +178,14 @@ fn main() -> Result<()> {
                 .unwrap_or(ScmKind::CodeCommit);
             let input = review_pr(&pr_id, scm, &common)?;
 
-            run_review_flow(input, common, start)
+            run_review_flow(input, common, Some(scm), start)
         }
 
         Some(Commands::Commit { sha, common }) => {
             let common = apply_default_ai(common, &config);
             let input = review_commit(&sha, &common)?;
 
-            run_review_flow(input, common, start)
+            run_review_flow(input, common, None, start)
         }
 
         None => {
@@ -151,8 +204,14 @@ fn apply_default_ai(mut common: CommonArgs, config: &config::AppConfig) -> Commo
     common
 }
 
-fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Result<()> {
-    let prompt = build_prompt(&input);
+fn run_review_flow(
+    input: ReviewInput,
+    common: CommonArgs,
+    scm_kind: Option<ScmKind>,
+    start: Instant,
+) -> Result<()> {
+    let prompt_profile = resolve_prompt_profile(scm_kind, &input.repository, &common.repo_path)?;
+    let prompt = build_prompt(&input, &prompt_profile);
     let tmp_dir = std::env::temp_dir();
     let diff_path = tmp_dir.join(format!("{}-diff.patch", input.artifact_prefix));
     let prompt_path = tmp_dir.join(format!("{}-prompt.txt", input.artifact_prefix));
@@ -252,6 +311,44 @@ fn run_review_flow(input: ReviewInput, common: CommonArgs, start: Instant) -> Re
     );
 
     Ok(())
+}
+
+fn preview_review_input(scm_kind: ScmKind, repository: &str) -> ReviewInput {
+    let pr_id = "12345".to_string();
+
+    ReviewInput {
+        diff: r#"diff --git a/src/example.rs b/src/example.rs
+index 1111111..2222222 100644
+--- a/src/example.rs
++++ b/src/example.rs
+@@ -1,4 +1,6 @@
+ pub fn example() {
+-    do_old_thing();
++    if is_enabled() {
++        do_new_thing();
++    }
+ }
+"#
+        .to_string(),
+        metadata: format!(
+            "Review target: {} PR #{}\nRepository: {}\nSource branch: feature/example\nDestination branch: main",
+            scm_kind.display_name(),
+            pr_id,
+            repository
+        ),
+        prompt_scope:
+            "Review ONLY the changes contained in this PR diff file. Treat this diff as the source of truth."
+                .to_string(),
+        artifact_prefix: scm_kind.artifact_prefix(&pr_id),
+        review_kind: "pr".to_string(),
+        repository: repository.to_string(),
+        source: "feature/example".to_string(),
+        target: "main".to_string(),
+        review_ref: scm_kind.review_ref(&pr_id),
+        remote: "origin".to_string(),
+        pr_id: Some(pr_id),
+        sha: None,
+    }
 }
 
 fn store_review_artifacts(
