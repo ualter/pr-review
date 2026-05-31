@@ -6,8 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::ai_backend::{AiBackend, AiEvent, CliAiBackend};
 use crate::{
-    artifacts::{load_review_meta, run_ai_tool_streaming, AiRunResult},
+    artifacts::{load_review_meta, AiRunResult},
     cli::{AiTool, ReviewInput},
     markdown_viewer::{
         open_markdown_text, open_markdown_viewer, open_markdown_viewer_at_end,
@@ -246,20 +247,44 @@ fn process_user_question(
     session.append_user_message(actual_question)?;
     let context = select_context_for_question(session, input, actual_question, force_full_diff)?;
     let prompt = build_chat_prompt(input, actual_question, &context);
+    let backend = CliAiBackend::new(tool);
+    let spinner_label = format!("{} is thinking...", tool.display_name());
     let mut spinner = Some(start_spinner(
         tool.status_icon(),
-        format!("{} is thinking...", tool.display_name()),
+        spinner_label.clone(),
     ));
     let mut streamed_anything = false;
-    let run_result = run_ai_tool_streaming(tool, &prompt, |chunk| {
-        if let Some(active_spinner) = spinner.take() {
-            active_spinner.stop();
-            println!();
-        }
+    let answer = backend.run_review(&prompt, &mut |event| match event {
+        AiEvent::TextDelta(chunk) => {
+            if let Some(active_spinner) = spinner.take() {
+                active_spinner.stop();
+                println!();
+            }
 
-        streamed_anything = true;
-        print!("{chunk}");
-        let _ = io::stdout().flush();
+            streamed_anything = true;
+            print!("{chunk}");
+            let _ = io::stdout().flush();
+        }
+        AiEvent::Status(message) => {
+            if crate::debug::DEBUG {
+                if let Some(active_spinner) = spinner.take() {
+                    active_spinner.stop();
+                    println!();
+                }
+                println!("{YELLOW}[debug]{RESET} {message}");
+                spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+            }
+        }
+        AiEvent::Failed(message) => {
+            if crate::debug::DEBUG {
+                if let Some(active_spinner) = spinner.take() {
+                    active_spinner.stop();
+                    println!();
+                }
+                println!("{YELLOW}[debug]{RESET} failure: {message}");
+            }
+        }
+        AiEvent::Started | AiEvent::Finished => {}
     })?;
 
     if let Some(active_spinner) = spinner.take() {
@@ -268,10 +293,7 @@ fn process_user_question(
         println!();
     }
 
-    let answer = run_result.output;
-    if !run_result.streamed {
-        println!("\n{}\n", answer);
-    } else {
+    if streamed_anything {
         println!();
     }
     session.append_ai_message(&answer)?;
@@ -416,7 +438,9 @@ fn append_message(path: &Path, role: &str, message: &str) -> Result<()> {
 }
 
 fn run_ai_tool_silently(tool: &AiTool, prompt: &str) -> Result<AiRunResult> {
-    run_ai_tool_streaming(tool, prompt, |_| {})
+    let backend = CliAiBackend::new(tool);
+    let output = backend.run_review(prompt, &mut |_| {})?;
+    Ok(AiRunResult { output })
 }
 
 fn parse_last_command(input: &str, command: &str) -> Result<Option<Option<usize>>> {

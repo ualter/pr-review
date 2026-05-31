@@ -14,7 +14,8 @@ impl ScmProvider for CodeCommitProvider {
             &common.repo_path,
             "aws",
             &["codecommit", "get-pull-request", "--pull-request-id", pr_id],
-        )?;
+        )
+        .map_err(|err| rewrite_codecommit_auth_error(err, pr_id))?;
 
         let parsed: Value = serde_json::from_str(&json)?;
         let pr = &parsed["pullRequest"];
@@ -111,6 +112,45 @@ impl ScmProvider for CodeCommitProvider {
             ],
         )
     }
+}
+
+fn rewrite_codecommit_auth_error(err: anyhow::Error, pr_id: &str) -> anyhow::Error {
+    let raw = err.to_string();
+
+    if raw.contains("ExpiredTokenException") {
+        return anyhow!(
+            "{RED_BOLD}AWS session expired while fetching CodeCommit PR metadata{RESET} for PR `{}`.\n\n\
+{YELLOW_BOLD}What happened:{BLUE}\n\
+- your AWS CLI credentials/session token is no longer valid\n\
+- `aws codecommit get-pull-request` could not authenticate\n\n\
+{GREEN_BOLD}What to do:{BLUE}\n\
+- refresh or re-login your AWS session\n\
+- verify it with `aws sts get-caller-identity`\n\
+- then rerun `pr-review`\n\n\
+{YELLOW_BOLD}Original AWS error:{RESET}\n{}",
+            pr_id,
+            raw
+        );
+    }
+
+    if raw.contains("InvalidClientTokenId") || raw.contains("UnrecognizedClientException") {
+        return anyhow!(
+            "{RED_BOLD}AWS credentials are invalid while fetching CodeCommit PR metadata{RESET} for PR `{}`.\n\n\
+{YELLOW_BOLD}What happened:{BLUE}\n\
+- the AWS CLI credentials currently in use were rejected\n\
+- `aws codecommit get-pull-request` could not authenticate this request\n\n\
+{GREEN_BOLD}What to do:{BLUE}\n\
+- refresh or re-login your AWS session\n\
+- check the active AWS profile and environment variables\n\
+- verify it with `aws sts get-caller-identity`\n\
+- then rerun `pr-review`\n\n\
+{YELLOW_BOLD}Original AWS error:{RESET}\n{}",
+            pr_id,
+            raw
+        );
+    }
+
+    err
 }
 
 fn clean_branch_name(reference: &str) -> String {

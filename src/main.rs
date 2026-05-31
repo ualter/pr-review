@@ -1,3 +1,4 @@
+mod ai_backend;
 mod artifacts;
 mod cli;
 mod config;
@@ -10,6 +11,7 @@ mod scm;
 mod session;
 mod ui;
 
+use ai_backend::{AiBackend, AiEvent, CliAiBackend};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use std::{
@@ -19,13 +21,9 @@ use std::{
     time::Instant,
 };
 
-use artifacts::{
-    ai_run_debug_mode, existing_review_artifact_dir, review_artifact_dir, run_ai_tool_streaming,
-    write_review_meta,
-};
+use artifacts::{existing_review_artifact_dir, review_artifact_dir, write_review_meta};
 use cli::{Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
 use config::{init_user_config, load_user_config, set_user_config, ConfigInitStatus};
-use debug::DEBUG;
 use prompt_profile::{init_user_prompt_profiles, resolve_prompt_profile, PromptInitStatus};
 use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
@@ -37,11 +35,10 @@ use ui::{
 use crate::{
     artifacts::{list_review_sessions, select_review_session},
     cli::SessionCommand,
+    debug::{TESTING, TEST_PROMPT},
     markdown_viewer::open_markdown_text,
     ui::{print_sessions, BannerType},
 };
-
-const TESTING: bool = false;
 
 fn main() -> Result<()> {
     let start = Instant::now();
@@ -280,37 +277,48 @@ fn run_review_flow(
 
         let prompt_arg = fs::read_to_string(&prompt_path)?;
         let prompt_arg = if TESTING {
-            "1+1 is".to_string()
+            TEST_PROMPT.to_string()
         } else {
             prompt_arg
         };
 
-        if DEBUG {
-            println!("{YELLOW}[debug]{RESET} AI: {}", tool.display_name());
-            println!("{YELLOW}[debug]{RESET} Prompt bytes: {}", prompt_arg.len());
-            println!(
-                "{YELLOW}[debug]{RESET} Execution mode: {}",
-                ai_run_debug_mode(tool, &prompt_arg)
-            );
-        }
-
-        let mut spinner_handler = Some(start_spinner(
-            tool.status_icon(),
-            format!("{} is reviewing...", tool.display_name()),
-        ));
+        let backend = CliAiBackend::new(tool);
+        let spinner_label = format!("{} is reviewing...", tool.display_name());
+        let mut spinner_handler = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
         let mut streamed_anything = false;
+        let review = backend.run_review(&prompt_arg, &mut |event| match event {
+            AiEvent::TextDelta(chunk) => {
+                if let Some(active_spinner) = spinner_handler.take() {
+                    active_spinner.stop();
+                    println!();
+                }
 
-        let review = run_ai_tool_streaming(tool, &prompt_arg, |chunk| {
-            if let Some(active_spinner) = spinner_handler.take() {
-                active_spinner.stop();
-                println!();
+                streamed_anything = true;
+                print!("{chunk}");
+                let _ = io::stdout().flush();
             }
-
-            streamed_anything = true;
-            print!("{chunk}");
-            let _ = io::stdout().flush();
-        })?
-        .output;
+            AiEvent::Status(message) => {
+                if crate::debug::DEBUG {
+                    if let Some(active_spinner) = spinner_handler.take() {
+                        active_spinner.stop();
+                        println!();
+                    }
+                    println!("{YELLOW}[debug]{RESET} {message}");
+                    spinner_handler =
+                        Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+                }
+            }
+            AiEvent::Failed(message) => {
+                if crate::debug::DEBUG {
+                    if let Some(active_spinner) = spinner_handler.take() {
+                        active_spinner.stop();
+                        println!();
+                    }
+                    println!("{YELLOW}[debug]{RESET} failure: {message}");
+                }
+            }
+            AiEvent::Started | AiEvent::Finished => {}
+        })?;
 
         if let Some(active_spinner) = spinner_handler.take() {
             active_spinner.stop();

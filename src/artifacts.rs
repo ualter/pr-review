@@ -41,7 +41,6 @@ pub struct LoadedReviewMeta {
 
 pub struct AiRunResult {
     pub output: String,
-    pub streamed: bool,
 }
 
 pub fn write_review_meta(
@@ -218,7 +217,6 @@ where
                         &["-p", &small_prompt],
                         on_chunk,
                     )?,
-                    streamed: true,
                 })
             } else {
                 Ok(AiRunResult {
@@ -228,7 +226,6 @@ where
                         &["-p", prompt],
                         on_chunk,
                     )?,
-                    streamed: true,
                 })
             }
         }
@@ -240,7 +237,6 @@ where
                 prompt,
                 on_chunk,
             )?,
-            streamed: true,
         }),
     }
 }
