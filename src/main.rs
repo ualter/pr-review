@@ -47,7 +47,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     if cli.version {
-        ui::print_startup_banner();
+        ui::print_version_banner();
         return Ok(());
     }
 

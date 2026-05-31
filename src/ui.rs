@@ -239,6 +239,14 @@ pub fn print_interactive_help(tool: &AiTool) {
 }
 
 pub fn print_startup_banner() {
+    print_banner(true);
+}
+
+pub fn print_version_banner() {
+    print_banner(false);
+}
+
+fn print_banner(clear_screen: bool) {
     let frames = [
         include_str!("../assets/banner_01/frame_01.txt"),
         include_str!("../assets/banner_01/frame_02.txt"),
@@ -259,18 +267,41 @@ pub fn print_startup_banner() {
         include_str!("../assets/banner_01/frame_17.txt"),
     ];
 
-    print!("\x1b[H");
-    print!("\x1b[2J");
+    if clear_screen {
+        print!("\x1b[H");
+        print!("\x1b[2J");
+    } else {
+        println!();
+        println!("{BLUE_BOLD}{LINE}{RESET}");
+    }
+
+    print!("\x1b[?25l");
+    let _ = std::io::stdout().flush();
 
     for frame in frames {
-        print!("\x1b[H"); // cursor home
-        println!("{GREEN_BOLD}{frame}{RESET}");
+        if clear_screen {
+            print!("\x1b[H");
+            println!("{GREEN_BOLD}{frame}{RESET}");
+        } else {
+            print!("\r\x1b[2K{GREEN_BOLD}{frame}{RESET}");
+            let _ = std::io::stdout().flush();
+        }
         let _ = std::io::stdout().flush();
         std::thread::sleep(std::time::Duration::from_millis(70));
     }
 
+    print!("\x1b[?25h");
+    let _ = std::io::stdout().flush();
+
+    if !clear_screen {
+        println!();
+    }
+
     println!("  {BLACK_BOLD} AI-Assisted Engineering Review CLI{RESET}");
     print_version_reveal();
+    if !clear_screen {
+        println!("{BLUE_BOLD}{LINE}{RESET}");
+    }
 }
 
 fn print_version_reveal() {
