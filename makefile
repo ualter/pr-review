@@ -42,6 +42,11 @@ dist-local-without-copilot-sdk: build-without-copilot-sdk  ## Build without Copi
 dist-plan: ## Show plan for distribution (Windows, Linux, MacOS)
 	dist plan
 
+release: ## Release using github actions (check tags before running, check dist-plan output for details)
+	git tag -a v0.1.0 -m "Release v0.1.0"
+	git push origin main
+	git push origin v0.1.0
+
 
 # USAGE SAMPLES:
 
