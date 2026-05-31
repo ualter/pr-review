@@ -204,11 +204,14 @@ This creates:
 Show the final built prompt after profile resolution:
 
 ```bash
+pr-review prompt show
 pr-review prompt show --scm codecommit --repo my-repo
 ```
 
 Optional:
 
+- no arguments: show the built-in default prompt
+- `--scm` + `--repo`: show the resolved prompt for that target
 - `--repo-path <PATH>`: include a repo-local `.pr-review/prompt.toml` in the resolution chain if present
 
 ## Review Flow

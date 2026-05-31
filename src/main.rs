@@ -117,17 +117,50 @@ fn main() -> Result<()> {
                 repo,
                 repo_path,
             } => {
-                let prompt_profile = resolve_prompt_profile(Some(scm), &repo, &repo_path)?;
-                let input = preview_review_input(scm, &repo);
+                let (prompt_profile, input, scope_label, title) = match (scm, repo.as_deref()) {
+                    (None, None) => {
+                        let input = preview_review_input(ScmKind::CodeCommit, "example-repo");
+                        let profile = prompt_profile::built_in_default_profile();
+                        (
+                            profile,
+                            input,
+                            "built-in default".to_string(),
+                            "🧾 Default Prompt Preview".to_string(),
+                        )
+                    }
+                    (Some(scm_kind), Some(repository)) => {
+                        let profile =
+                            resolve_prompt_profile(Some(scm_kind), repository, &repo_path)?;
+                        let input = preview_review_input(scm_kind, repository);
+                        (
+                            profile,
+                            input,
+                            format!(
+                                "resolved for {} / {}",
+                                scm_kind.config_dir_name(),
+                                repository
+                            ),
+                            "🧾 Prompt Preview".to_string(),
+                        )
+                    }
+                    (Some(_), None) => {
+                        anyhow::bail!("`pr-review prompt show --scm <scm>` also requires `--repo <name>`, or run `pr-review prompt show` with no arguments to inspect the built-in default prompt.")
+                    }
+                    (None, Some(_)) => {
+                        anyhow::bail!("`pr-review prompt show --repo <name>` also requires `--scm <scm>`, or run `pr-review prompt show` with no arguments to inspect the built-in default prompt.")
+                    }
+                };
+
                 let prompt = build_prompt(&input, &prompt_profile);
                 let markdown = format!(
-                    "# Prompt Preview\n\n- SCM: `{}`\n- Repository: `{}`\n- Repo path: `{}`\n\n```text\n{}\n```",
-                    scm.config_dir_name(),
-                    repo,
+                    "# Prompt Preview\n\n- Scope: `{}`\n- SCM: `{}`\n- Repository: `{}`\n- Repo path: `{}`\n\n```text\n{}\n```",
+                    scope_label,
+                    scm.map(|kind| kind.config_dir_name()).unwrap_or("default"),
+                    input.repository,
                     repo_path.display(),
                     prompt
                 );
-                open_markdown_text("🧾 Prompt Preview", &markdown, false)
+                open_markdown_text(&title, &markdown, false)
             }
         },
 

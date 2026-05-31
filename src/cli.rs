@@ -88,15 +88,15 @@ pub enum PromptCommand {
         repo: String,
     },
 
-    /// Show the final built prompt for a given SCM and repository
+    /// Show the built-in default prompt, or the resolved prompt for a given SCM/repository
     Show {
         /// SCM name for prompt resolution
         #[arg(long, value_name = "SCM")]
-        scm: ScmKind,
+        scm: Option<ScmKind>,
 
         /// Repository name for prompt resolution
         #[arg(long, value_name = "REPO")]
-        repo: String,
+        repo: Option<String>,
 
         /// Repo path used to include a repo-local .pr-review/prompt.toml if present
         #[arg(long, default_value = ".")]
