@@ -6,17 +6,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::ai_backend::{backend_for_tool, AiEvent};
+use crate::ai_backend::{AiEvent, backend_for_tool};
 use crate::{
-    artifacts::{load_review_meta, AiRunResult},
+    artifacts::{AiRunResult, load_review_meta},
     cli::{AiTool, ReviewInput},
     markdown_viewer::{
         open_markdown_text, open_markdown_viewer, open_markdown_viewer_at_end,
         print_markdown_document, print_markdown_text,
     },
     ui::{
-        print_interactive_help, render_interactive_prompt, start_spinner, BLACK_BOLD, BLUE_BOLD,
-        GREEN_BOLD, LINE, RESET, YELLOW, YELLOW_BOLD,
+        BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW, YELLOW_BOLD,
+        print_interactive_help, render_interactive_prompt, start_spinner,
     },
 };
 
@@ -110,8 +110,8 @@ pub fn run_interactive_session(
     println!("  {YELLOW}/last [N]{RESET}          {YELLOW}/last-print [N]{RESET}");
 
     println!(
-    "{BLACK_BOLD}Tip:{RESET} Ask follow-up questions naturally — only use {YELLOW}/full{RESET} when the AI needs the complete diff context again."
-);
+        "{BLACK_BOLD}Tip:{RESET} Ask follow-up questions naturally — only use {YELLOW}/full{RESET} when the AI needs the complete diff context again."
+    );
     println!("{LINE}");
 
     loop {
@@ -206,14 +206,14 @@ pub fn run_interactive_session(
                     update_conversation_summary(&session, tool)?;
                     spinner.stop();
                 }
-                println!("{LINE}");
+                println!("{BLUE_BOLD}{LINE}{RESET}");
                 println!(
                     "{}Conversation saved to:{} {}",
                     GREEN_BOLD,
                     RESET,
                     session.conversation_path.display()
                 );
-                println!("{LINE}");
+                println!("{BLUE_BOLD}{LINE}{RESET}");
                 break;
             }
 
@@ -249,10 +249,7 @@ fn process_user_question(
     let prompt = build_chat_prompt(input, actual_question, &context);
     let backend = backend_for_tool(tool);
     let spinner_label = format!("{} is thinking...", tool.display_name());
-    let mut spinner = Some(start_spinner(
-        tool.status_icon(),
-        spinner_label.clone(),
-    ));
+    let mut spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
     let mut streamed_anything = false;
     let answer = backend.run_review(&prompt, &mut |event| match event {
         AiEvent::TextDelta(chunk) => {

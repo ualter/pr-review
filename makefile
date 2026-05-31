@@ -39,6 +39,9 @@ dist-local-without-copilot-sdk: build-without-copilot-sdk  ## Build without Copi
 	mkdir -p ~/.local/bin
 	cp target/release/pr-review ~/.local/bin/
 
+dist-plan: ## Show plan for distribution (Windows, Linux, MacOS)
+	dist plan
+
 
 # USAGE SAMPLES:
 

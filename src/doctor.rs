@@ -2,12 +2,12 @@ use anyhow::Result;
 use std::{fs, path::Path, process::Command};
 
 use crate::artifacts::reports_archive_dir;
-use crate::ui::{BLUE_BOLD, GREEN_BOLD, LINE, RED_BOLD, RESET, YELLOW_BOLD};
+use crate::ui::{BLUE_BOLD, GREEN_BOLD, RED_BOLD, RESET, YELLOW_BOLD};
 
 pub fn run_doctor(repo_path: &Path) -> Result<()> {
-    println!("{LINE}");
-    println!("{BLUE_BOLD}🩺 pr-review doctor{RESET}");
-    println!("{LINE}");
+    let line = "-----------------------------------------------------------------";
+    println!("\n{GREEN_BOLD}🩺 pr-review doctor{RESET}");
+    println!("{BLUE_BOLD}{line}{RESET}");
 
     let mut failed = false;
 
@@ -19,15 +19,16 @@ pub fn run_doctor(repo_path: &Path) -> Result<()> {
     check_git_repo(repo_path, &mut failed);
     check_reports_dir(&mut failed)?;
 
-    println!("{LINE}");
+    println!("{BLUE_BOLD}{line}{RESET}");
 
     if failed {
-        println!("{YELLOW_BOLD}⚠ Some checks failed. Fix the issues above before running a review.{RESET}");
+        println!(
+            "{YELLOW_BOLD}⚠ Some checks failed. Fix the issues above before running a review.{RESET}"
+        );
     } else {
         println!("{GREEN_BOLD}✨ Environment looks ready.{RESET}");
     }
 
-    println!("{LINE}");
     Ok(())
 }
 

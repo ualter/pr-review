@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 use crate::artifacts::{repo_name, run_command};
 use crate::cli::{CommonArgs, ReviewInput};
@@ -6,11 +6,12 @@ use crate::prompt_profile::PromptProfile;
 use crate::scm::bitbucket::BitbucketProvider;
 use crate::scm::codecommit::CodeCommitProvider;
 use crate::scm::{ScmKind, ScmProvider};
-use crate::ui::{BLUE_BOLD, LINE, RESET, YELLOW};
+use crate::ui::{self, BLUE_BOLD, LINE, RESET, YELLOW};
 
 pub fn review_pr(pr_id: &str, scm_kind: ScmKind, common: &CommonArgs) -> Result<ReviewInput> {
-    println!("\n{LINE}");
-    println!("{YELLOW}Validating PR ID {BLUE_BOLD}{pr_id}...{RESET}");
+    ui::print_header();
+    println!("\n{YELLOW}Validating PR ID {BLUE_BOLD}{pr_id}...{RESET}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
     println!(
         "{YELLOW}Fetching {} PR metadata...{RESET}",
         scm_kind.display_name()
@@ -41,8 +42,9 @@ pub fn review_pr(pr_id: &str, scm_kind: ScmKind, common: &CommonArgs) -> Result<
 }
 
 pub fn review_commit(sha: &str, common: &CommonArgs) -> Result<ReviewInput> {
-    println!("\n{LINE}");
-    println!("{YELLOW}Validating commit {sha}...{RESET}");
+    ui::print_header();
+    println!("\n{YELLOW}Validating commit {BLUE_BOLD}{sha}...{RESET}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
 
     // The ^{commit} syntax ensures we are checking for a commit object,
     // not just any git object (like a blob or tree) that might have the same SHA prefix
@@ -118,25 +120,24 @@ pub fn build_prompt(input: &ReviewInput, profile: &PromptProfile) -> String {
         .as_deref()
         .unwrap_or_default();
 
-    let architecture_section = if profile.architecture_summary.is_some()
-        || !profile.architecture_rules.is_empty()
-    {
-        format!(
-            "Architecture rules:\n{}\n\nCheck that:\n{}\n",
-            profile
-                .architecture_summary
-                .as_deref()
-                .unwrap_or("No architecture summary configured."),
-            profile
-                .architecture_rules
-                .iter()
-                .map(|item| format!("- {item}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )
-    } else {
-        String::new()
-    };
+    let architecture_section =
+        if profile.architecture_summary.is_some() || !profile.architecture_rules.is_empty() {
+            format!(
+                "Architecture rules:\n{}\n\nCheck that:\n{}\n",
+                profile
+                    .architecture_summary
+                    .as_deref()
+                    .unwrap_or("No architecture summary configured."),
+                profile
+                    .architecture_rules
+                    .iter()
+                    .map(|item| format!("- {item}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        } else {
+            String::new()
+        };
 
     let review_focus = profile
         .review_focus

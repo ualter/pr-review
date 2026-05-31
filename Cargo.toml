@@ -31,3 +31,8 @@ termimad = "0.34.1"
 github-copilot-sdk = "0.1.0"
 tokio = { version = "1", features = ["macros", "rt", "time"] }
 ctrlc = "3.4.7"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

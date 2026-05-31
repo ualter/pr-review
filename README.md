@@ -1,12 +1,89 @@
 # pr-review
 
-AI-assisted PR and commit review CLI written in Rust.
+[![Rust](https://img.shields.io/badge/Rust-2024-orange)](...)
+[![License](https://img.shields.io/badge/license-Apache%202-blue)](...)
 
-`pr-review` generates a high-signal review from a PR diff or a commit patch, stores the artifacts under `~/.pr-review/reports`, and can immediately continue in an interactive follow-up session with the selected AI.
+AI-assisted engineering review CLI for pull requests and commits.
 
-The tool is opinionated. It is meant to behave more like a senior engineer reviewer than a generic summarizer: focus on bugs, regressions, architecture violations, security risk, deployment risk, and missing tests.
+Generate high-signal AI reviews, explore findings through an interactive session, and resume previous reviews without rerunning the original analysis.
 
-## What It Supports
+## Demo
+
+### 1. CLI Experience
+
+Animated startup banner, environment checks, and local readiness validation.
+
+![pr-review overview](docs/media/demo-01-overview.gif)
+
+---
+
+### 2. Review a Pull Request
+
+Generate a PR review, inspect the markdown report, ask follow-up questions, and print the latest conversation.
+
+![pr-review PR workflow](docs/media/pr-review-demo.gif)
+
+---
+
+### 3. Resume a Saved Review Session
+
+Continue a previous review session, ask new questions, and inspect existing findings without regenerating the diff or rerunning the original review.
+
+![pr-review session resume](docs/media/pr-session-demo.gif)
+
+---
+
+## Quick Start
+
+Download the binary, verify your environment, and review your first pull request.
+
+```bash
+pr-review doctor
+```
+
+```bash
+pr-review pr 4669 \
+  --repo-path ~/repos/backend \
+  --scm codecommit \
+  --ai codex
+```
+That's it.
+
+---
+
+## Features
+
+- AI reviews focused on engineering risk
+- Interactive follow-up conversations
+- Persistent review sessions
+- Resume reviews without regenerating analysis
+- Support for CodeCommit and Bitbucket PRs
+- Commit review from local Git
+- Customizable review policies through Prompt Profiles
+
+---
+
+## Review Philosophy
+
+`pr-review` is designed to behave more like an experienced engineering reviewer than a generic AI summarizer.
+
+The default review focuses on:
+
+- Functional bugs and regressions
+- Security and operational risks
+- Architecture and design concerns
+- Deployment and migration risks
+- Missing tests and validation gaps
+
+It intentionally de-emphasizes:
+
+- Formatting issues
+- Style nitpicks
+- Low-value cosmetic observations
+
+---
+
+## Detailed Features
 
 - PR review from `codecommit` or `bitbucket`
 - Single-commit review from local Git

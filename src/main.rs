@@ -11,7 +11,7 @@ mod scm;
 mod session;
 mod ui;
 
-use ai_backend::{backend_for_tool, AiEvent};
+use ai_backend::{AiEvent, backend_for_tool};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use std::{
@@ -23,22 +23,22 @@ use std::{
 
 use artifacts::{existing_review_artifact_dir, review_artifact_dir, write_review_meta};
 use cli::{Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
-use config::{init_user_config, load_user_config, set_user_config, ConfigInitStatus};
-use prompt_profile::{init_user_prompt_profiles, resolve_prompt_profile, PromptInitStatus};
+use config::{ConfigInitStatus, init_user_config, load_user_config, set_user_config};
+use prompt_profile::{PromptInitStatus, init_user_prompt_profiles, resolve_prompt_profile};
 use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
 use session::resume_interactive_session;
 use ui::{
-    print_artifacts, print_header, print_report, restore_cursor, start_spinner, GREEN,
-    GREEN_BOLD, RESET, YELLOW,
+    GREEN, GREEN_BOLD, RESET, YELLOW, print_artifacts, print_report, print_review_flow_header,
+    restore_cursor, start_spinner,
 };
 
 use crate::{
     artifacts::{list_review_sessions, select_review_session},
     cli::SessionCommand,
-    debug::{TESTING, TEST_PROMPT},
+    debug::{TEST_PROMPT, TESTING},
     markdown_viewer::open_markdown_text,
-    ui::{print_sessions, BannerType},
+    ui::{BannerType, print_sessions},
 };
 
 fn main() -> Result<()> {
@@ -68,6 +68,7 @@ fn main() -> Result<()> {
 
         Some(Commands::Config { command }) => match command {
             ConfigCommand::Init => {
+                ui::print_header();
                 let (path, status) = init_user_config()?;
 
                 match status {
@@ -90,6 +91,7 @@ fn main() -> Result<()> {
 
         Some(Commands::Prompt { command }) => match command {
             PromptCommand::Init { scm, repo } => {
+                ui::print_header();
                 let result = init_user_prompt_profiles(scm, &repo)?;
 
                 match result.default_status {
@@ -122,6 +124,7 @@ fn main() -> Result<()> {
                 repo,
                 repo_path,
             } => {
+                ui::print_header();
                 let (prompt_profile, input, scope_label, title) = match (scm, repo.as_deref()) {
                     (None, None) => {
                         let input = preview_review_input(ScmKind::CodeCommit, "example-repo");
@@ -149,10 +152,14 @@ fn main() -> Result<()> {
                         )
                     }
                     (Some(_), None) => {
-                        anyhow::bail!("`pr-review prompt show --scm <scm>` also requires `--repo <name>`, or run `pr-review prompt show` with no arguments to inspect the built-in default prompt.")
+                        anyhow::bail!(
+                            "`pr-review prompt show --scm <scm>` also requires `--repo <name>`, or run `pr-review prompt show` with no arguments to inspect the built-in default prompt."
+                        )
                     }
                     (None, Some(_)) => {
-                        anyhow::bail!("`pr-review prompt show --repo <name>` also requires `--scm <scm>`, or run `pr-review prompt show` with no arguments to inspect the built-in default prompt.")
+                        anyhow::bail!(
+                            "`pr-review prompt show --repo <name>` also requires `--scm <scm>`, or run `pr-review prompt show` with no arguments to inspect the built-in default prompt."
+                        )
                     }
                 };
 
@@ -170,6 +177,7 @@ fn main() -> Result<()> {
         },
 
         Some(Commands::Doctor) => {
+            ui::print_header();
             doctor::run_doctor(std::path::Path::new("."))?;
             Ok(())
         }
@@ -180,6 +188,7 @@ fn main() -> Result<()> {
             ai,
         }) => match command {
             Some(SessionCommand::List) => {
+                ui::print_header();
                 let sessions = list_review_sessions()?;
                 let session_paths: Vec<std::path::PathBuf> =
                     sessions.into_iter().map(std::path::PathBuf::from).collect();
@@ -188,6 +197,7 @@ fn main() -> Result<()> {
             }
 
             Some(SessionCommand::Resume { review_name, ai }) => {
+                ui::print_header();
                 let review_name = match review_name {
                     Some(name) => name,
                     None => {
@@ -213,6 +223,7 @@ fn main() -> Result<()> {
             }
 
             None => {
+                ui::print_header();
                 let review_name = match review_name {
                     Some(name) => name,
                     None => select_review_session()?,
@@ -280,7 +291,7 @@ fn run_review_flow(
     let report_path = PathBuf::from(format!("{}-review.md", input.artifact_prefix));
     let artifact_dir = review_artifact_dir(&input.artifact_prefix)?;
 
-    print_header(
+    print_review_flow_header(
         &input.repository,
         &input.source,
         &input.target,

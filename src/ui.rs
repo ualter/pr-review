@@ -4,14 +4,14 @@ use dialoguer::{
 };
 
 use crate::cli::AiTool;
-use crate::config::{user_config, PromptStyle};
+use crate::config::{PromptStyle, user_config};
 use anyhow::Result;
 use std::{
     io::{self, Write},
     path::Path,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     thread,
     time::Duration,
@@ -33,8 +33,7 @@ pub const FG_GREEN_BG: &str = "\x1b[38;5;34m";
 pub const BG_GREEN: &str = "\x1b[48;5;34m";
 pub const BG_BLACK: &str = "\x1b[48;5;0m";
 
-pub const LINE: &str =
-    "----------------------------------------------------------------------------------------------------------------";
+pub const LINE: &str = "----------------------------------------------------------------------------------------------------------------";
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -43,13 +42,22 @@ pub fn restore_cursor() {
     let _ = io::stdout().flush();
 }
 
-pub fn print_header(repository: &str, source: &str, target: &str, review_branch: &str) {
-    println!("{LINE}");
+pub fn print_header() {
+    let h_line = "------------------------------------------------------------";
+    println!("{BLUE_BOLD}{h_line}{RESET}");
+    println!(
+        " {}PR-REVIEW{}   ✨ {}AI-Assisted Engineering Review CLI{}   {}v{}{}",
+        GREEN_BOLD, RESET, BLACK_BOLD, RESET, BLUE_BOLD, APP_VERSION, RESET
+    );
+    println!("{BLUE_BOLD}{h_line}{RESET}");
+}
+
+pub fn print_review_flow_header(repository: &str, source: &str, target: &str, review_branch: &str) {
     println!("{}Repository: {}{}", GREEN_BOLD, repository, RESET);
     println!("{}Source:     {}{}", BLUE_BOLD, source, RESET);
     println!("{}Target:     {}{}", BLUE_BOLD, target, RESET);
     println!("{}Review:     {}{}", YELLOW_BOLD, review_branch, RESET);
-    println!("{LINE}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
 }
 
 pub struct SpinnerHandle {
@@ -96,7 +104,7 @@ pub fn print_artifacts(
         prompt_path.display(),
         RESET
     );
-    println!("{LINE}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
     println!(
         "{}Artifacts archived to: {}{}",
         GREEN_BOLD,
@@ -124,7 +132,7 @@ pub fn print_artifacts(
             RESET
         );
     }
-    println!("{LINE}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
     if ai.is_none() {
         println!("{BLACK_BOLD}Run manually with one of:{RESET}");
         for tool in &[AiTool::Copilot, AiTool::Codex] {
@@ -134,7 +142,7 @@ pub fn print_artifacts(
                 tool.manual_hint(prompt_path)
             );
         }
-        println!("{LINE}");
+        println!("{BLUE_BOLD}{LINE}{RESET}");
     }
 }
 
@@ -160,7 +168,7 @@ pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration,
         elapsed.as_secs_f64(),
         RESET
     );
-    println!("{LINE}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
     println!(
         "{}Review report written to: {}{}{}",
         GREEN_BOLD,
@@ -175,7 +183,7 @@ pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration,
         archived_path.display(),
         RESET
     );
-    println!("{LINE}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
 }
 
 pub fn start_spinner(icon: &str, message: impl Into<String>) -> SpinnerHandle {
@@ -265,10 +273,7 @@ pub fn render_interactive_prompt(tool: &AiTool) -> String {
     let tool_name = tool.display_name().to_lowercase();
 
     match user_config().prompt_style {
-        PromptStyle::Simple => format!(
-            "{BLUE_BOLD}{} pr-review>{RESET} ",
-            tool.status_icon(),
-        ),
+        PromptStyle::Simple => format!("{BLUE_BOLD}{} pr-review>{RESET} ", tool.status_icon(),),
         PromptStyle::Fancy => format!(
             "{FG_DARK_BG}░▒▓{BG_DARK}{FG_WHITE_BOLD}{} {} {BG_GREEN}{FG_DARK_BG}{FG_WHITE_BOLD} pr-review {BG_BLACK}{FG_GREEN_BG}{RESET} ",
             tool.status_icon(),
@@ -318,7 +323,10 @@ pub fn print_interactive_help(tool: &AiTool) {
     }
     println!();
 
-    println!("{BLACK_BOLD}Anything else will be sent directly to the AI assistant {BLACK_BOLD}({}).{RESET}", tool.display_name());
+    println!(
+        "{BLACK_BOLD}Anything else will be sent directly to the AI assistant {BLACK_BOLD}({}).{RESET}",
+        tool.display_name()
+    );
     println!("{LINE}");
 }
 
@@ -571,9 +579,8 @@ fn print_version_reveal() {
 }
 
 pub fn print_sessions(sessions: &[std::path::PathBuf]) {
-    println!("{LINE}");
-    println!("{YELLOW_BOLD}Existing review sessions{RESET}");
-    println!("{LINE}");
+    println!("\n{YELLOW_BOLD}Existing review sessions{RESET}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
 
     if sessions.is_empty() {
         println!("{BLACK_BOLD}No resumable sessions found.{RESET}");
@@ -588,7 +595,7 @@ pub fn print_sessions(sessions: &[std::path::PathBuf]) {
         }
     }
 
-    println!("{LINE}");
+    // println!("{LINE}");
 }
 
 pub fn pick_session(sessions: Vec<String>) -> Result<String> {
@@ -619,7 +626,7 @@ pub fn pick_session(sessions: Vec<String>) -> Result<String> {
         .items(&sessions)
         .default(0)
         .with_prompt(format!(
-            "{line}\n{YELLOW_BOLD}  🧮 👉 Select a review session to resume {BLACK_BOLD}(<ESC> to cancel){YELLOW_BOLD}\n{BLUE_BOLD} {line}{RESET}"
+            "\n{YELLOW_BOLD}  🧮 👉 Select a review session to resume {BLACK_BOLD}(<ESC> to cancel){YELLOW_BOLD}\n{BLUE_BOLD} {line}{RESET}"
         ))
         .report(false)
         .interact_opt()?;
