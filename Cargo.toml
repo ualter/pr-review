@@ -1,7 +1,12 @@
 [package]
 name = "pr-review"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+authors = ["Ualter Otoni <ualter.junior@gmail.com>"]
+description = "A CLI tool for reviewing Pull Requests (CodeCommit, Bitbucket, ...) using AI."
+license = "Apache-2.0"
+repository = "https://github.com/ualter/pr-review"
+homepage = "https://github.com/ualter/pr-review"
 default-run = "pr-review"
 
 [features]
