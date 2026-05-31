@@ -1,6 +1,7 @@
 mod artifacts;
 mod cli;
 mod config;
+mod debug;
 mod doctor;
 mod markdown_viewer;
 mod prompt_profile;
@@ -19,10 +20,12 @@ use std::{
 };
 
 use artifacts::{
-    existing_review_artifact_dir, review_artifact_dir, run_ai_tool_streaming, write_review_meta,
+    ai_run_debug_mode, existing_review_artifact_dir, review_artifact_dir, run_ai_tool_streaming,
+    write_review_meta,
 };
 use cli::{Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
 use config::{init_user_config, load_user_config, set_user_config, ConfigInitStatus};
+use debug::DEBUG;
 use prompt_profile::{init_user_prompt_profiles, resolve_prompt_profile, PromptInitStatus};
 use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
@@ -281,6 +284,15 @@ fn run_review_flow(
         } else {
             prompt_arg
         };
+
+        if DEBUG {
+            println!("{YELLOW}[debug]{RESET} AI: {}", tool.display_name());
+            println!("{YELLOW}[debug]{RESET} Prompt bytes: {}", prompt_arg.len());
+            println!(
+                "{YELLOW}[debug]{RESET} Execution mode: {}",
+                ai_run_debug_mode(tool, &prompt_arg)
+            );
+        }
 
         let mut spinner_handler = Some(start_spinner(
             tool.status_icon(),

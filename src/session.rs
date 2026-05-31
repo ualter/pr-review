@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    artifacts::{load_review_meta, run_ai_tool, run_ai_tool_streaming},
+    artifacts::{load_review_meta, run_ai_tool_streaming, AiRunResult},
     cli::{AiTool, ReviewInput},
     markdown_viewer::{
         open_markdown_text, open_markdown_viewer, open_markdown_viewer_at_end,
@@ -369,7 +369,7 @@ Full review:
         input.metadata, review
     );
 
-    run_ai_tool(tool, &prompt)
+    Ok(run_ai_tool_silently(tool, &prompt)?.output)
 }
 
 fn update_conversation_summary(session: &ReviewSession, tool: &AiTool) -> Result<()> {
@@ -391,7 +391,7 @@ Conversation:
         conversation
     );
 
-    let summary = run_ai_tool(tool, &prompt)?;
+    let summary = run_ai_tool_silently(tool, &prompt)?.output;
 
     fs::write(&session.conversation_summary_path, summary).with_context(|| {
         format!(
@@ -413,6 +413,10 @@ fn append_message(path: &Path, role: &str, message: &str) -> Result<()> {
     writeln!(file, "\n## {role}\n\n{message}\n")?;
 
     Ok(())
+}
+
+fn run_ai_tool_silently(tool: &AiTool, prompt: &str) -> Result<AiRunResult> {
+    run_ai_tool_streaming(tool, prompt, |_| {})
 }
 
 fn parse_last_command(input: &str, command: &str) -> Result<Option<Option<usize>>> {

@@ -180,44 +180,13 @@ pub fn load_review_meta(artifact_dir: &Path) -> Result<LoadedReviewMeta> {
 
 const MAX_COPILOT_PROMPT_BYTES: usize = 129_000;
 
-// - copilot takes the prompt as a CLI argument: copilot -p "...prompt..." → run_command is enough
-// - codex review - the - flag means "read from stdin" → needs run_command_with_stdin to pipe the prompt in
-//
-// If codex had a flag like codex review -p "prompt" we wouldn't need it. The difference is purely dictated by how each CLI wasdesigned to receive its input.
-//
-//  copilot -p "<prompt>"          ← prompt lives in argv
-//  codex review -                 ← prompt comes through stdin pipe
-//
-// That's the only reason for the two functions — one writes to args, the other writes to stdin.
-
-pub fn run_ai_tool(tool: &AiTool, prompt: &str) -> Result<String> {
+pub fn ai_run_debug_mode(tool: &AiTool, prompt: &str) -> &'static str {
     match tool {
-        AiTool::Copilot => {
-            if prompt.len() > MAX_COPILOT_PROMPT_BYTES {
-                // Copilot has a hard limit on prompt size, and performance degrades well before that limit. For very large PRs,
-                // we write the prompt to a temporary file and pass instructions to read from that file instead.
-                eprintln!(
-    "\n{YELLOW}⚠️  Large PR detected ({}) bytes.{RESET}\n\
-{BLACK_BOLD}Copilot may struggle with very large reviews or hit prompt limits.{RESET}\n\
-{BLUE_BOLD}Tip:{RESET} For large PRs, consider using {YELLOW_BOLD}--ai codex{RESET} for better reliability and context handling.\n",
-    prompt.len()
-);
-                let prompt_file = tempfile::NamedTempFile::new()?;
-                std::fs::write(prompt_file.path(), prompt)?;
-
-                let small_prompt = format!(
-                    "Read and follow the complete PR review prompt in this file:\n\n{}\n\nTreat that file as the full instructions and source of truth.",
-                    prompt_file.path().display()
-                );
-
-                run_command(Path::new("."), "copilot", &["-p", &small_prompt])
-            } else {
-                // For smaller prompts, we can pass directly through the CLI argument as intended.
-                run_command(Path::new("."), "copilot", &["-p", prompt])
-            }
+        AiTool::Copilot if prompt.len() > MAX_COPILOT_PROMPT_BYTES => {
+            "copilot streaming via temp-file prompt shim"
         }
-
-        AiTool::Codex => run_command_with_stdin(Path::new("."), "codex", &["review", "-"], prompt),
+        AiTool::Copilot => "copilot streaming via direct CLI argument",
+        AiTool::Codex => "codex streaming via stdin",
     }
 }
 
@@ -274,44 +243,6 @@ where
             streamed: true,
         }),
     }
-}
-
-/// Spawns a command and writes `input` to its stdin, capturing stdout.
-fn run_command_with_stdin(
-    repo_path: &Path,
-    program: &str,
-    args: &[&str],
-    input: &str,
-) -> Result<String> {
-    let mut child = Command::new(program)
-        .args(args)
-        .current_dir(repo_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("Failed to spawn: {program} {}", args.join(" ")))?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(input.as_bytes())
-            .context("Failed to write prompt to stdin")?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .with_context(|| format!("Failed to wait for: {program}"))?;
-
-    if !output.status.success() {
-        return Err(anyhow!(
-            "Command failed: {} {}\n{}",
-            program,
-            args.join(" "),
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn run_command_streaming<F>(

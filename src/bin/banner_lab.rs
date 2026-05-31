@@ -82,6 +82,6 @@ fn main() {
     }
 
     print!("\x1b[?25h");
-    print!("{RESET}\n");
+    println!("{RESET}");
     let _ = io::stdout().flush();
 }
