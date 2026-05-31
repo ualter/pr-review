@@ -1,207 +1,144 @@
-### Interactive Session Layer
+# Interactive Sessions
+
+`pr-review` enters interactive mode automatically after a PR or commit review when `--ai` is provided. Use `--no-interactive` only if you want the review to finish and return directly to the shell.
+
+The session layer is persistent. It stores the initial review, compressed summaries, conversation history, and per-file diff chunks so you can resume later without rerunning the original review.
+
+## Prompt shape
+
+Initial review:
 
 ```text
-initial review:
-  full prompt + full diff -> AI -> review.md
-
-interactive chat:
-  small prompt + selected context -> AI -> conversation.md
-
-resume session:
-  existing session state -> AI -> continue conversation
+full review prompt + full diff -> AI -> review.md
 ```
 
-Main pieces:
+Follow-up chat:
 
-1. **`session.rs`**
+```text
+review-summary.md
+conversation-summary.md
+selected diff chunk(s)
+current user question
+    -> AI -> append to conversation.md
+```
 
-   * Creates/uses the review artifact directory.
-   * Creates and maintains:
+Resume:
 
-     * `conversation.md`
-     * `conversation-summary.md`
-     * `review-summary.md`
-     * `diff-by-file/`
-     * provider-specific session state files
-   * Splits the full diff into one patch file per changed file.
-   * Starts an interactive terminal loop:
+```text
+saved artifact directory -> load session state -> continue conversation
+```
 
-     ```bash
-     pr-review>
-     ```
+`/full` is the only interactive command that forces the complete diff back into the prompt.
 
-   * Saves every user/AI exchange to `conversation.md`.
-   * Supports resuming previous interactive sessions without regenerating the review.
+## Stored artifacts
 
-2. **Smart context selection**
+Each interactive session lives under:
 
-   * Interactive mode does **not** resend the full diff every turn.
-   * It dynamically builds a compact context using:
+```text
+~/.pr-review/reports/<review-name>/
+```
 
-     ```text
-     review-summary.md
-     conversation-summary.md
-     relevant diff file(s)
-     current user question
-     ```
+Typical contents:
 
-   * Relevant diff files are selected heuristically based on keyword matching between the user question and changed files.
-   * Full diff is only injected when explicitly requested:
+```text
+diff.patch
+prompt.txt
+review.md
+review-summary.md
+conversation.md
+conversation-summary.md
+diff-by-file/
+meta.json
+```
 
-     ```text
-     /full
-     ```
+`diff-by-file/` is created from the original diff so follow-up questions can load only the most relevant changed file patches instead of resending the whole diff every turn.
 
-3. **Review summary**
+## Session commands
 
-   * After the initial AI review completes, the same AI provider generates a compressed version of the review:
+Inside the interactive session:
 
-     ```text
-     review-summary.md
-     ```
+- `/help`
+- `/summary`
+- `/summary-print`
+- `/review`
+- `/review-print`
+- `/review-summary`
+- `/review-summary-print`
+- `/last`
+- `/last N`
+- `/last-print`
+- `/last-print N`
+- `/full`
+- `/exit`
 
-   * Interactive conversations use this summary instead of the full review report to reduce token usage and improve focus.
+Notes:
 
-4. **Conversation summary**
+- `/last` opens the conversation at the end.
+- `/last N` shows only the last `N` request/response exchanges.
+- `/exit` saves the conversation and refreshes `conversation-summary.md`.
 
-   * After each interactive exchange, the tool updates:
+## Conversation summary behavior
 
-     ```text
-     conversation-summary.md
-     ```
+The conversation summary is no longer refreshed after every question. It is updated on `/exit` when the session changed. That reduces token usage for longer interactive sessions.
 
-   * Future turns use the compact summary instead of replaying the entire conversation history.
+## Resume behavior
 
-5. **Provider-compatible**
-
-   * Interactive mode uses the same provider abstraction already used for reviews:
-
-     ```rust
-     run_ai_tool(tool, &prompt)
-     ```
-
-   * Compatible with:
-
-     ```text
-     --ai copilot
-     --ai codex
-     ```
-
-6. **Persistent session model**
-
-   * The interactive session state is persisted under:
-
-     ```text
-     ~/.pr-review/reports/<review-name>/
-     ```
-
-   * Example:
-
-     ```text
-     ~/.pr-review/reports/codecommit-pr-4663/
-     ```
-
-   * Stored artifacts include:
-
-     ```text
-     diff.patch
-     prompt.txt
-     review.md
-     review-summary.md
-     conversation.md
-     conversation-summary.md
-     diff-by-file/
-     meta.json
-     ```
-
-7. **Resume existing sessions**
-
-   * Existing interactive sessions can be resumed without:
-
-     * fetching branches
-     * regenerating diffs
-     * rebuilding prompts
-     * rerunning the AI review
-
-   * The tool simply reloads the saved interactive session state and continues the conversation.
-
-   * Command:
-
-     ```bash
-     pr-review session <review-name> --ai codex
-     ```
-
-   * Example:
-
-     ```bash
-     pr-review session codecommit-pr-4663 --ai codex
-     ```
-
-8. **Execution flow**
-
-   ```mermaid
-   sequenceDiagram
-       autonumber
-
-       actor User
-       participant CLI as pr-review CLI
-       participant Git as Git / CodeCommit
-       participant FS as ~/.pr-review/reports
-       participant AI as AI Tool
-       participant Chat as Interactive Session
-
-       alt New PR / Commit review
-           User->>CLI: pr-review pr 4663 --ai codex --interactive
-           CLI->>Git: Fetch PR/commit metadata
-           CLI->>Git: Generate diff
-           CLI->>CLI: Build review prompt
-           CLI->>FS: Save diff.patch, prompt.txt, meta.json
-           CLI->>AI: Run initial AI review
-           AI-->>CLI: Review report
-           CLI->>FS: Save review.md
-           CLI->>CLI: prepare_session_artifacts()
-           CLI->>Chat: run_interactive_session()
-           Chat->>FS: Save chat/session state
-       else Resume existing session
-           User->>CLI: pr-review session codecommit-pr-4663 --ai codex
-           CLI->>FS: Locate existing artifact directory
-           CLI->>FS: Load existing session state
-           CLI->>Chat: resume_interactive_session()
-           Chat->>AI: Continue previous conversation
-           Chat->>FS: Save updated chat/session state
-       end
-   ```
-
-Expected usage:
+Resume commands:
 
 ```bash
-pr-review pr 4663 \
-  --repo-path ~/developer/repos/datahub-code/datahub-backend \
-  --ai codex \
-  --interactive
+pr-review session list
+pr-review session resume <review-name> --ai codex
+pr-review session resume <review-name>
+pr-review session resume
+```
+
+Behavior:
+
+- `session list` shows resumable sessions from `~/.pr-review/reports`
+- `session resume <review-name>` continues that session
+- `session resume` without a name opens the picker
+- if `--ai` is omitted on resume, `default_ai` from config is used
+
+Resuming a session does not:
+
+- refetch the PR
+- regenerate the diff
+- rebuild the original review prompt
+- rerun the initial review
+
+It simply reloads the saved state and continues the conversation.
+
+## Session fidelity
+
+Current sessions persist full review metadata in `meta.json`, including review kind, artifact prefix, repo path, repository/source/target fields, and PR or commit identity. Resume uses that saved metadata rather than reconstructing placeholder values.
+
+Legacy sessions without the newer metadata shape still load. A warning is shown only when the missing fields make the inferred identity incomplete.
+
+## Example flow
+
+Run a review and enter chat:
+
+```bash
+pr-review pr 4669 \
+  --repo-path ~/repos/backend \
+  --scm codecommit \
+  --ai codex
+```
+
+Leave the session:
+
+```text
+/exit
 ```
 
 Resume later:
 
 ```bash
-pr-review session codecommit-pr-4663 --ai codex
+pr-review session resume codecommit-pr-4669 --ai codex
 ```
 
-Commit review:
+Resume with the configured default AI:
 
 ```bash
-pr-review commit abc123 \
-  --repo-path ~/developer/repos/datahub-code/datahub-backend \
-  --ai codex \
-  --interactive
+pr-review session resume codecommit-pr-4669
 ```
-
-Resume commit session:
-
-```bash
-pr-review session commit-abc123 --ai codex
-```
-
-In short:
-
-`pr-review` evolved from a static AI review generator into a persistent AI-assisted engineering review environment, where the tool itself owns the review memory, summaries, diff segmentation, and interactive session continuity instead of depending on Copilot/Codex native session persistence. 

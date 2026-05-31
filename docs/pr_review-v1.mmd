@@ -6,7 +6,7 @@ sequenceDiagram
     participant AI as AI Tool<br/>Copilot/Codex
     participant Session as session.rs
 
-    Dev->>CLI: pr-review pr 4663 --ai codex --interactive
+    Dev->>CLI: pr-review pr 4663 --ai codex
 
     CLI->>Git: Fetch PR metadata + branches
     Git-->>CLI: source, target, repo metadata
@@ -36,9 +36,6 @@ sequenceDiagram
         Session->>AI: Small chat prompt<br/>summary + selected diff + question
         AI-->>Session: answer
         Session->>Art: Append to conversation.md
-        Session->>AI: Update compact conversation summary
-        AI-->>Session: updated summary
-        Session->>Art: Save conversation-summary.md
         Session-->>Dev: Show answer
     end
 
@@ -47,4 +44,7 @@ sequenceDiagram
     end
 
     Dev->>Session: /exit
+    Session->>AI: Update compact conversation summary once if conversation changed
+    AI-->>Session: updated summary
+    Session->>Art: Save conversation-summary.md
     Session-->>Dev: Conversation saved

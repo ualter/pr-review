@@ -1,50 +1,31 @@
 # pr-review
 
-AI-assisted Pull Request and Commit review CLI written in Rust.
+AI-assisted PR and commit review CLI written in Rust.
 
-`pr-review` automates high-signal engineering reviews using AI tools such as GitHub Copilot CLI (and later Codex / additional providers).
+`pr-review` generates a high-signal review from a PR diff or a commit patch, stores the artifacts under `~/.pr-review/reports`, and can immediately continue in an interactive follow-up session with the selected AI.
 
-The goal is not to generate generic summaries.
+The tool is opinionated. It is meant to behave more like a senior engineer reviewer than a generic summarizer: focus on bugs, regressions, architecture violations, security risk, deployment risk, and missing tests.
 
-The goal is to behave more like a senior engineer reviewer:
+## What It Supports
 
-* architecture-aware
-* infrastructure-aware
-* security-aware
-* operational-risk-aware
-* focused on actionable findings only
-
----
-
-# Current Features
-
-* AWS CodeCommit PR review
-* Single commit review by SHA
-* Automatic git diff generation
-* AI prompt generation
-* Copilot CLI integration
-* Colored terminal UX
-* Spinner/progress display
-* Artifact generation
-* Review report generation
-* Repository path support (`--repo-path`)
-* Architecture/layering validation rules
-
----
-
-# Installation
+- PR review from `codecommit` or `bitbucket`
+- Single-commit review from local Git
+- `copilot` and `codex` AI providers
+- Streaming AI output while the review is being generated
+- Automatic archive of prompts, diffs, reports, and session state
+- Interactive follow-up chat after the initial review
+- Resume of saved sessions without regenerating the original review
+- User config in `~/.pr-review/config.toml`
 
 ## Requirements
 
-* Rust
-* Cargo
-* Git
-* AWS CLI
-* GitHub Copilot CLI
-* authenticated AWS session
-* authenticated Copilot CLI
-
----
+- Rust / Cargo
+- Git
+- `copilot` CLI if you want to use `--ai copilot`
+- `codex` CLI if you want to use `--ai codex`
+- AWS CLI and a working AWS session for CodeCommit PR review
+- `curl` for Bitbucket PR review
+- Bitbucket token available as `BB_TOKEN` for Bitbucket PR review
 
 ## Build
 
@@ -58,374 +39,319 @@ Binary:
 target/release/pr-review
 ```
 
-Optional global install:
+Optional install:
 
 ```bash
 cargo install --path .
 ```
 
----
+## Quick Start
 
-# CLI Usage
-
-The CLI currently supports two review modes:
+Initialize the user config once:
 
 ```bash
-pr-review pr <PR_ID>
-pr-review commit <SHA>
+pr-review config init
 ```
 
----
-
-# Pull Request Review
-
-## Example
+Review a CodeCommit PR and enter chat automatically:
 
 ```bash
-pr-review pr 4663 \
-  --repo-path ~/developer/repos/datahub-code/datahub-backend \
-  --run-copilot
+pr-review pr 4669 \
+  --repo-path ~/repos/backend \
+  --scm codecommit \
+  --ai codex
 ```
 
----
-
-## What Happens Internally
-
-The tool:
-
-1. Retrieves PR metadata from AWS CodeCommit
-2. Extracts source and target branches
-3. Fetches both branches
-4. Generates the git diff between them
-5. Builds a structured AI review prompt
-6. Writes artifacts to disk
-7. Optionally sends the prompt to Copilot
-8. Saves the AI review report
-
----
-
-## PR Diff Logic
-
-PR review compares:
-
-```text
-target branch
-VS
-source branch
-```
-
-Equivalent conceptually to:
+Review a Bitbucket PR:
 
 ```bash
-git diff target_branch source_branch
+export BB_TOKEN=...
+
+pr-review pr 123 \
+  --repo-path ~/repos/backend \
+  --scm bitbucket \
+  --ai copilot
 ```
 
-This represents the TOTAL net change introduced by the branch.
-
----
-
-# Commit Review
-
-## Example
+Review a single commit:
 
 ```bash
 pr-review commit 8f31c2a \
-  --repo-path ~/developer/repos/datahub-code/datahub-backend \
-  --run-copilot
+  --repo-path ~/repos/backend \
+  --ai codex
 ```
 
----
-
-## What Happens Internally
-
-The tool:
-
-1. Validates the commit exists
-2. Extracts commit metadata
-3. Generates the patch introduced by the commit
-4. Builds a structured AI review prompt
-5. Writes artifacts to disk
-6. Optionally sends the prompt to Copilot
-7. Saves the AI review report
-
----
-
-## Commit Diff Logic
-
-Commit review compares:
-
-```text
-parent commit
-VS
-target commit
-```
-
-Equivalent conceptually to:
+If you want the tool to stop after writing the review instead of entering chat:
 
 ```bash
-git show <SHA>
+pr-review pr 4669 \
+  --repo-path ~/repos/backend \
+  --ai codex \
+  --no-interactive
 ```
 
-or:
+## Commands
 
-```bash
-git diff <SHA>^ <SHA>
-```
-
-Meaning:
-
-> "What exactly changed when the parent commit became this commit?"
-
----
-
-# Artifact Generation
-
-The tool generates several artifacts.
-
-## Temporary Files
-
-Written into `/tmp`:
-
-```text
-/tmp/codecommit-pr-4663-diff.patch
-/tmp/codecommit-pr-4663-copilot-prompt.txt
-```
-
-or:
-
-```text
-/tmp/commit-8f31c2a-diff.patch
-/tmp/commit-8f31c2a-copilot-prompt.txt
-```
-
----
-
-## Final Review Report
-
-Written into the current directory:
-
-```text
-codecommit-pr-4663-review.md
-```
-
-or:
-
-```text
-commit-8f31c2a-review.md
-```
-
----
-
-# Terminal Output
-
-Example:
-
-```text
--------------------------------------------------------------------------------
-Repository: datahub-backend-dev
-Source:     DLTA-18480-squad-stack-and-CDK
-Target:     Development-v5.4
-Review:     review/pr-4663
--------------------------------------------------------------------------------
-Diff written to:   /tmp/codecommit-pr-4663-diff.patch
-Prompt written to: /tmp/codecommit-pr-4663-copilot-prompt.txt
--------------------------------------------------------------------------------
-
-Run Copilot manually with:
-  copilot -p "$(cat /tmp/codecommit-pr-4663-copilot-prompt.txt)"
-
-Sending prompt to Copilot...
-
-Copilot review completed in 145.2s
--------------------------------------------------------------------------------
-
-Review report written to: codecommit-pr-4663-review.md
--------------------------------------------------------------------------------
-```
-
----
-
-# AI Review Philosophy
-
-The tool intentionally avoids noisy low-value AI comments.
-
-The review prompt enforces focus on:
-
-* bugs
-* regressions
-* security issues
-* AWS/CDK/IAM risks
-* maintainability concerns
-* rollback/deployment risks
-* transaction consistency
-* architectural violations
-* dependency direction
-* authorization/authentication mistakes
-* performance regressions
-
-The tool explicitly avoids:
-
-* formatting comments
-* generic style nitpicks
-* speculative findings
-* low-confidence suggestions
-
----
-
-# Architecture Rules
-
-The current review rules assume this architecture:
-
-```text
-FrontEnd
-  -> GraphQL API resolvers/mutations
-  -> Service layer
-  -> Repository layer
-  -> DB via SQLAlchemy models
-```
-
-The AI validates:
-
-* resolvers call Service layer only
-* resolvers do not access repositories directly
-* resolvers do not access SQLAlchemy directly
-* Service owns orchestration/business logic
-* Repository owns persistence
-* dependency flow remains downward
-* no architectural layer skipping
-
----
-
-# Current Internal Flow
-
-```text
-CLI
-  -> review_pr() / review_commit()
-  -> generate diff
-  -> build_prompt()
-  -> write artifacts
-  -> optional Copilot execution
-  -> save report
-```
-
----
-
-# Current Commands
-
-## Review a PR
+### Review a PR
 
 ```bash
 pr-review pr <PR_ID> [OPTIONS]
 ```
 
-## Review a commit
+Important options:
+
+- `--scm <codecommit|bitbucket>`: override the SCM provider for PR resolution
+- `--repo-path <PATH>`: repository path used for local Git operations and artifact context
+- `--remote <NAME>`: Git remote for CodeCommit/local Git fetches, default `origin`
+- `--ai <copilot|codex>`: run the AI automatically after generating artifacts
+- `--no-interactive`: do not enter the interactive session after the review
+- `--bb-url <URL>`: override Bitbucket URL for this run
+- `--bb-project <KEY>`: override Bitbucket project for this run
+- `--bb-repo <SLUG>`: override Bitbucket repo for this run
+
+Examples:
+
+```bash
+pr-review pr 4669 --repo-path ~/repos/backend --scm codecommit --ai codex
+pr-review pr 123 --repo-path ~/repos/backend --scm bitbucket --ai copilot
+pr-review pr 123 --repo-path ~/repos/backend --scm bitbucket --bb-project PLATFORM --bb-repo api --ai codex
+pr-review pr 4669 --repo-path ~/repos/backend
+```
+
+### Review a Commit
 
 ```bash
 pr-review commit <SHA> [OPTIONS]
 ```
 
----
+Important options:
 
-# Options
+- `--repo-path <PATH>`
+- `--remote <NAME>`
+- `--ai <copilot|codex>`
+- `--no-interactive`
 
-```text
---remote <name>       Git remote name (default: origin)
-
---repo-path <path>    Path to the repository
-
---run-copilot         Execute Copilot automatically
-```
-
----
-
-# Example Manual Copilot Execution
-
-If `--run-copilot` is omitted:
+Examples:
 
 ```bash
-copilot -p "$(cat /tmp/codecommit-pr-4663-copilot-prompt.txt)"
+pr-review commit 8f31c2a --repo-path ~/repos/backend --ai codex
+pr-review commit 8f31c2a --repo-path ~/repos/backend --ai copilot --no-interactive
+pr-review commit 8f31c2a --repo-path ~/repos/backend
 ```
 
----
+### Session Commands
 
-# Important Notes
+List resumable sessions:
 
-## Repository Path
+```bash
+pr-review session list
+```
 
-The tool does NOT require execution from inside the repository.
+Resume a session by name:
+
+```bash
+pr-review session resume codecommit-pr-4669 --ai codex
+```
+
+Resume using the configured default AI:
+
+```bash
+pr-review session resume codecommit-pr-4669
+```
+
+Resume with the interactive picker:
+
+```bash
+pr-review session resume
+```
+
+### Config and Environment Checks
+
+Initialize or update the config file:
+
+```bash
+pr-review config init
+```
+
+Check local dependencies and directories:
+
+```bash
+pr-review doctor
+```
+
+Show the startup banner:
+
+```bash
+pr-review banner
+```
+
+## Review Flow
+
+### PR review
+
+The tool:
+
+1. resolves PR metadata from the configured SCM provider
+2. resolves the PR diff
+3. builds the review prompt
+4. writes artifacts to disk
+5. runs the AI if `--ai` is provided
+6. writes `review.md`
+7. prepares the interactive session artifacts
+8. enters the interactive session unless `--no-interactive` was passed
+
+### Commit review
+
+The tool:
+
+1. validates the commit exists locally
+2. reads commit metadata from Git
+3. generates the commit patch with Git
+4. builds the review prompt
+5. writes artifacts to disk
+6. runs the AI if `--ai` is provided
+7. writes `review.md`
+8. prepares the interactive session artifacts
+9. enters the interactive session unless `--no-interactive` was passed
+
+If `--ai` is omitted, `pr-review` still generates and archives the diff, prompt, and metadata, but it does not run the AI and does not start an interactive session.
+
+## SCM Behavior
+
+### CodeCommit
+
+For CodeCommit PRs:
+
+- PR metadata comes from CodeCommit
+- PR diff is still resolved with local Git using the configured `--remote`
+- the local repository must match the target repository
+
+If the source or destination branch fetch fails, `pr-review` prints a friendlier error that points to likely causes such as wrong `--repo-path`, wrong `--remote`, or a deleted branch.
+
+### Bitbucket
+
+For Bitbucket PRs:
+
+- PR metadata comes from Bitbucket REST
+- PR diff also comes from Bitbucket REST
+- PR review does not need Git remote credentials
+- `BB_TOKEN` must be set in the shell environment
+
+Bitbucket settings resolve with this precedence:
+
+1. CLI override
+2. environment variable
+3. `~/.pr-review/config.toml`
+
+Supported settings:
+
+- URL:
+  - CLI: `--bb-url`
+  - env: `BB_URL`
+  - config: `[bitbucket].url`
+- project:
+  - CLI: `--bb-project`
+  - env: `BB_PROJECT`
+  - config: `[bitbucket].project`
+- repo:
+  - CLI: `--bb-repo`
+  - env: `BB_REPO`
+  - config: `[bitbucket].repo`
+- token:
+  - env only: `BB_TOKEN`
 
 Example:
 
 ```bash
-pr-review pr 4663 \
-  --repo-path ~/repos/datahub-backend
+export BB_TOKEN=...
+
+pr-review pr 123 \
+  --repo-path ~/repos/backend \
+  --scm bitbucket \
+  --bb-project PLATFORM \
+  --bb-repo api \
+  --ai codex
 ```
 
-Internally all git commands run using:
+## Configuration
 
-```rust
-.current_dir(repo_path)
-```
-
----
-
-## Commit Review Limitations
-
-Current commit review works best for:
-
-* normal commits
-* squash commits
-* feature commits
-
-Merge commits may produce more complex diffs because Git commits can have multiple parents.
-
----
-
-# Future Vision
-
-Planned future features:
-
-* GitHub PR support
-* GitLab support
-* Codex provider support
-* multiple AI providers
-* streaming output
-* automatic PR comments
-* review caching
-* diff chunking
-* repo-specific templates
-* semantic indexing/RAG
-* SARIF export
-* CI/CD integration
-* security review profiles
-* performance review profiles
-* infrastructure review profiles
-
----
-
-# Philosophy
-
-The objective is NOT:
+Config file path:
 
 ```text
-"Use AI to summarize a PR"
+~/.pr-review/config.toml
 ```
 
-The objective is:
+Run:
 
-```text
-"Use AI to augment senior engineering review workflows"
+```bash
+pr-review config init
 ```
 
----
+Behavior:
 
-# Commands that are *“cheap”* vs *“expensive”* in this tool
+- creates the file if it does not exist
+- if the file exists, adds missing supported keys
+- leaves existing values untouched
 
-### **Cheap**
+Current config shape:
 
-These do not call the AI at all:
-- `pr-review session list`
-- `pr-review session resume <name> --ai ...` by itself, until you ask a follow-up
+```toml
+# pr-review user configuration
+
+[ai]
+# valid values: "copilot" or "codex"
+default_ai = "codex"
+# valid values: "fancy" or "simple"
+prompt_style = "fancy"
+copilot_icon = "🧑‍✈️"
+codex_icon = "🤖"
+
+[scm]
+# valid values: "codecommit" or "bitbucket"
+default = "codecommit"
+
+[bitbucket]
+url = "https://bitbucket.example.com"
+project = "MYPROJ"
+repo = "my-repo"
+```
+
+### Config keys
+
+#### `[ai]`
+
+- `default_ai`: default AI used when `--ai` is omitted
+- `prompt_style`: `fancy` or `simple`
+- `copilot_icon`: UI icon for Copilot
+- `codex_icon`: UI icon for Codex
+
+#### `[scm]`
+
+- `default`: default SCM used when `pr-review pr ...` is run without `--scm`
+
+#### `[bitbucket]`
+
+- `url`: default Bitbucket Server/Data Center base URL
+- `project`: default project key
+- `repo`: default repo slug
+
+## Interactive Session
+
+After a review completes with `--ai`, `pr-review` enters an interactive session by default.
+
+The initial review uses the full review prompt and the full diff. Follow-up questions use a lighter prompt that combines:
+
+- `review-summary.md`
+- `conversation-summary.md`
+- selected relevant diff chunks from `diff-by-file/`
+- your current question
+
+Only `/full` forces the whole diff back into the follow-up prompt.
+
+The conversation summary is updated on `/exit`, not after every exchange.
+
+### Interactive commands
+
 - `/help`
 - `/summary`
 - `/summary-print`
@@ -437,63 +363,82 @@ These do not call the AI at all:
 - `/last N`
 - `/last-print`
 - `/last-print N`
-- `/exit`
-- `doctor`
-- `banner`
-
-These are just local file reads, local UI, or session loading.
-
-### **Moderate**
-
-These make AI calls, but usually with smaller context:
-- asking a normal follow-up question inside `--interactive`
-- resuming a session and then asking a targeted question like “what about `foo.rs`?”
-- summary generation after each follow-up
-
-Why moderate:
-- the follow-up prompt uses:
-  - saved review summary
-  - saved conversation summary
-  - selected diff chunk
-- then the app makes one more call to refresh `conversation-summary.md`
-
-So one user question in interactive mode is actually usually:
-1. answer the question
-2. update the conversation summary
-
-That means 2 AI calls.
-
-### **Expensive**
-
-These are the token-heavy paths:
-- `pr-review pr 4670 --ai ...`
-- `pr-review commit <sha> --ai ...`
-- `pr-review pr 4670 --ai ... --interactive`
 - `/full`
+- `/exit`
 
-Why:
-- fresh PR/commit review sends the big review prompt plus the full diff
-- `/full` sends the whole diff again inside the follow-up flow
+Normal text is sent directly to the AI as a follow-up question.
 
-###  **Most Expensive Pattern**
+### Resume behavior
 
-The worst token pattern is:
-- rerun `pr-review pr 4670 --ai ...` repeatedly instead of resuming
-- then use `/full` often
-- on a large PR
+Resuming a session does not:
 
-That repeatedly pays for the whole diff.
+- re-fetch the PR
+- regenerate the diff
+- rebuild the original review
+- rerun the initial full review
 
-**Practical Guidance**
+It reloads the saved session state and continues the conversation.
 
-Use this pattern to save tokens:
-1. Run the full review once:
-   - `pr-review pr 4670 --ai copilot --interactive`
-2. Later resume it:
-   - `pr-review session resume codecommit-pr-4670 --ai copilot`
-3. Ask focused questions
-4. Avoid `/full` unless you really need to recheck the whole diff
+## Artifact Layout
 
-So the cheapest useful workflow is:
-- one full review
-- many focused follow-ups through resume
+Archived reviews live under:
+
+```text
+~/.pr-review/reports/<review-name>/
+```
+
+Examples:
+
+```text
+~/.pr-review/reports/codecommit-pr-4669/
+~/.pr-review/reports/bitbucket-pr-123/
+~/.pr-review/reports/commit-8f31c2a/
+```
+
+Typical contents:
+
+```text
+diff.patch
+prompt.txt
+review.md
+review-summary.md
+conversation.md
+conversation-summary.md
+diff-by-file/
+meta.json
+```
+
+Temporary copies of the prompt and diff are also written under the system temp directory during review generation.
+
+## AI Cost Shape
+
+Cheapest actions:
+
+- `pr-review session list`
+- `pr-review session resume ...`
+- all viewer commands like `/summary`, `/review`, `/last`
+
+More expensive actions:
+
+- a normal interactive follow-up question
+- `/full`
+- rerunning the initial PR or commit review from scratch
+
+Practical pattern:
+
+1. run the full review once
+2. resume the saved session later
+3. ask focused questions
+4. use `/full` only when needed
+
+## Notes
+
+- Commit review is SCM-agnostic and local-Git-driven.
+- PR review is SCM-aware.
+- The review prompt is intentionally opinionated and currently assumes this application architecture:
+
+```text
+FrontEnd -> GraphQL API resolvers/mutations -> Service -> Repository -> DB via SQLAlchemy models
+```
+
+- The AI is instructed to focus on high-confidence findings, not style nitpicks or generic summaries.

@@ -3,15 +3,15 @@ sequenceDiagram
 
     actor User
     participant CLI as pr-review CLI
-    participant Git as Git / CodeCommit
+    participant SCM as SCM Provider
     participant FS as ~/.pr-review/reports
     participant AI as AI Tool
     participant Chat as Interactive Session
 
     alt New PR / Commit review
-        User->>CLI: pr-review pr 4663 --ai codex --interactive
-        CLI->>Git: Fetch PR/commit metadata
-        CLI->>Git: Generate diff
+        User->>CLI: pr-review pr 4663 --ai codex
+        CLI->>SCM: Resolve PR metadata or commit context
+        CLI->>SCM: Resolve diff
         CLI->>CLI: Build review prompt
         CLI->>FS: Save diff.patch, prompt.txt, meta.json
         CLI->>AI: Run initial AI review
