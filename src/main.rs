@@ -21,7 +21,7 @@ use artifacts::{
     existing_review_artifact_dir, review_artifact_dir, run_ai_tool_streaming, write_review_meta,
 };
 use cli::{Cli, Commands, CommonArgs, ConfigCommand, ReviewInput};
-use config::{init_user_config, load_user_config, set_user_config};
+use config::{init_user_config, load_user_config, set_user_config, ConfigInitStatus};
 use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
 use session::resume_interactive_session;
@@ -51,18 +51,21 @@ fn main() -> Result<()> {
 
         Commands::Config { command } => match command {
             ConfigCommand::Init => {
-                let (path, created) = init_user_config()?;
+                let (path, status) = init_user_config()?;
 
-                if created {
-                    println!(
+                match status {
+                    ConfigInitStatus::Created => println!(
                         "{GREEN_BOLD}Created config file:{RESET} {}",
                         path.display()
-                    );
-                } else {
-                    println!(
-                        "{YELLOW}Config file already exists:{RESET} {}",
+                    ),
+                    ConfigInitStatus::Updated => println!(
+                        "{YELLOW}Found existing config and added missing parameters:{RESET} {}",
                         path.display()
-                    );
+                    ),
+                    ConfigInitStatus::Unchanged => println!(
+                        "{YELLOW}Config file already up to date:{RESET} {}",
+                        path.display()
+                    ),
                 }
 
                 Ok(())

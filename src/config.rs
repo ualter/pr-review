@@ -116,22 +116,38 @@ pub fn user_config() -> &'static AppConfig {
     USER_CONFIG.get_or_init(AppConfig::default)
 }
 
-pub fn init_user_config() -> Result<(PathBuf, bool)> {
-    let path = config_path()?;
+pub enum ConfigInitStatus {
+    Created,
+    Updated,
+    Unchanged,
+}
 
-    if path.exists() {
-        return Ok((path, false));
-    }
+pub fn init_user_config() -> Result<(PathBuf, ConfigInitStatus)> {
+    let path = config_path()?;
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create config directory: {}", parent.display()))?;
     }
 
-    fs::write(&path, default_config_template())
-        .with_context(|| format!("Failed to write config file: {}", path.display()))?;
+    if !path.exists() {
+        fs::write(&path, default_config_template())
+            .with_context(|| format!("Failed to write config file: {}", path.display()))?;
+        return Ok((path, ConfigInitStatus::Created));
+    }
 
-    Ok((path, true))
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+    let updated = merge_missing_config_entries(&raw);
+
+    if updated == raw {
+        return Ok((path, ConfigInitStatus::Unchanged));
+    }
+
+    fs::write(&path, updated)
+        .with_context(|| format!("Failed to update config file: {}", path.display()))?;
+
+    Ok((path, ConfigInitStatus::Updated))
 }
 
 fn config_path() -> Result<PathBuf> {
@@ -169,6 +185,97 @@ impl PromptStyle {
             other => Err(anyhow::anyhow!(
                 "Invalid prompt style `{other}` in config. Expected `fancy` or `simple`."
             )),
+        }
+    }
+}
+
+fn merge_missing_config_entries(raw: &str) -> String {
+    let mut lines: Vec<String> = raw.lines().map(ToString::to_string).collect();
+
+    ensure_section(
+        &mut lines,
+        "ai",
+        &[
+            "# valid values: \"copilot\" or \"codex\"",
+            "default_ai = \"codex\"",
+            "# valid values: \"fancy\" or \"simple\"",
+            "prompt_style = \"fancy\"",
+            "copilot_icon = \"🧑‍✈️\"",
+            "codex_icon = \"🤖\"",
+        ],
+    );
+    ensure_section(
+        &mut lines,
+        "scm",
+        &[
+            "# valid values: \"codecommit\" or \"bitbucket\"",
+            "default = \"codecommit\"",
+        ],
+    );
+    ensure_section(
+        &mut lines,
+        "bitbucket",
+        &[
+            "url = \"https://bitbucket.example.com\"",
+            "project = \"MYPROJ\"",
+            "repo = \"my-repo\"",
+        ],
+    );
+
+    let mut result = lines.join("\n");
+    if !result.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
+fn ensure_section(lines: &mut Vec<String>, section: &str, entries: &[&str]) {
+    let header = format!("[{section}]");
+    let section_start = lines.iter().position(|line| line.trim() == header);
+
+    match section_start {
+        Some(start) => {
+            let section_end = lines
+                .iter()
+                .enumerate()
+                .skip(start + 1)
+                .find(|(_, line)| line.trim().starts_with('[') && line.trim().ends_with(']'))
+                .map(|(idx, _)| idx)
+                .unwrap_or(lines.len());
+
+            let mut missing = Vec::new();
+            for entry in entries {
+                if entry.trim_start().starts_with('#') {
+                    continue;
+                }
+
+                let key = entry.split('=').next().unwrap_or("").trim();
+                let has_key = lines[start + 1..section_end]
+                    .iter()
+                    .any(|line| line.split('=').next().map(|part| part.trim()) == Some(key));
+                if !has_key {
+                    missing.push((*entry).to_string());
+                }
+            }
+
+            if !missing.is_empty() {
+                let mut insert_at = section_end;
+                if insert_at > start + 1 && !lines[insert_at - 1].trim().is_empty() {
+                    lines.insert(insert_at, String::new());
+                    insert_at += 1;
+                }
+                for entry in missing {
+                    lines.insert(insert_at, entry);
+                    insert_at += 1;
+                }
+            }
+        }
+        None => {
+            if !lines.is_empty() && !lines.last().is_some_and(|line| line.trim().is_empty()) {
+                lines.push(String::new());
+            }
+            lines.push(header);
+            lines.extend(entries.iter().map(|entry| (*entry).to_string()));
         }
     }
 }
