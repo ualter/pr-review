@@ -26,6 +26,12 @@ pub enum ScmKind {
 
 pub trait ScmProvider {
     fn resolve_pr_context(&self, pr_id: &str, common: &CommonArgs) -> Result<PrContext>;
+    fn resolve_pr_diff(
+        &self,
+        pr_id: &str,
+        common: &CommonArgs,
+        context: &PrContext,
+    ) -> Result<String>;
 }
 
 impl ScmKind {

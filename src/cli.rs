@@ -91,6 +91,18 @@ pub struct CommonArgs {
     #[arg(long, default_value = ".")]
     pub repo_path: PathBuf,
 
+    /// Override Bitbucket base URL for this run
+    #[arg(long, value_name = "URL")]
+    pub bb_url: Option<String>,
+
+    /// Override Bitbucket project key for this run
+    #[arg(long, value_name = "PROJECT")]
+    pub bb_project: Option<String>,
+
+    /// Override Bitbucket repository slug for this run
+    #[arg(long, value_name = "REPO")]
+    pub bb_repo: Option<String>,
+
     /// AI tool to run after generating the prompt (omit to only generate artifacts)
     #[arg(long, value_name = "TOOL")]
     pub ai: Option<AiTool>,

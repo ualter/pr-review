@@ -17,6 +17,9 @@ pub struct AppConfig {
     pub copilot_icon: Option<String>,
     pub codex_icon: Option<String>,
     pub prompt_style: PromptStyle,
+    pub bitbucket_url: Option<String>,
+    pub bitbucket_project: Option<String>,
+    pub bitbucket_repo: Option<String>,
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -39,6 +42,7 @@ pub fn load_user_config() -> Result<AppConfig> {
     let mut config = AppConfig::default();
     let mut in_ai_section = false;
     let mut in_scm_section = false;
+    let mut in_bitbucket_section = false;
 
     for line in raw.lines() {
         let line = line.trim();
@@ -51,6 +55,7 @@ pub fn load_user_config() -> Result<AppConfig> {
             let section = line.trim_start_matches('[').trim_end_matches(']').trim();
             in_ai_section = section == "ai";
             in_scm_section = section == "scm";
+            in_bitbucket_section = section == "bitbucket";
             continue;
         }
 
@@ -63,6 +68,7 @@ pub fn load_user_config() -> Result<AppConfig> {
 
         if !in_ai_section
             && !in_scm_section
+            && !in_bitbucket_section
             && key != "default_ai"
             && key != "default_tool"
             && key != "default_scm"
@@ -85,6 +91,15 @@ pub fn load_user_config() -> Result<AppConfig> {
             }
             "prompt_style" if in_ai_section => {
                 config.prompt_style = PromptStyle::from_config_value(value)?;
+            }
+            "url" if in_bitbucket_section => {
+                config.bitbucket_url = Some(value.to_string());
+            }
+            "project" if in_bitbucket_section => {
+                config.bitbucket_project = Some(value.to_string());
+            }
+            "repo" if in_bitbucket_section => {
+                config.bitbucket_repo = Some(value.to_string());
             }
             _ => {}
         }
@@ -138,6 +153,11 @@ codex_icon = "🤖"
 [scm]
 # valid values: "codecommit" or "bitbucket"
 default = "codecommit"
+
+[bitbucket]
+url = "https://bitbucket.example.com"
+project = "MYPROJ"
+repo = "my-repo"
 "#
 }
 

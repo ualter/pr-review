@@ -4,16 +4,33 @@ use std::env;
 
 use crate::artifacts::run_command;
 use crate::cli::CommonArgs;
+use crate::config::user_config;
 use crate::scm::{PrContext, ScmKind, ScmProvider};
+use crate::ui::{BLACK_BOLD, BLUE, GREEN_BOLD, RED_BOLD, RESET, YELLOW_BOLD};
 
 pub struct BitbucketProvider;
 
 impl ScmProvider for BitbucketProvider {
     fn resolve_pr_context(&self, pr_id: &str, common: &CommonArgs) -> Result<PrContext> {
-        let bb_url = required_env("BB_URL")?;
+        let bb_url = resolve_setting(
+            common.bb_url.as_deref(),
+            "BB_URL",
+            user_config().bitbucket_url.as_deref(),
+            "bitbucket.url",
+        )?;
         let bb_token = required_env("BB_TOKEN")?;
-        let bb_project = required_env("BB_PROJECT")?;
-        let bb_repo = required_env("BB_REPO")?;
+        let bb_project = resolve_setting(
+            common.bb_project.as_deref(),
+            "BB_PROJECT",
+            user_config().bitbucket_project.as_deref(),
+            "bitbucket.project",
+        )?;
+        let bb_repo = resolve_setting(
+            common.bb_repo.as_deref(),
+            "BB_REPO",
+            user_config().bitbucket_repo.as_deref(),
+            "bitbucket.repo",
+        )?;
         let endpoint = format!(
             "{}/rest/api/1.0/projects/{}/repos/{}/pull-requests/{}",
             bb_url.trim_end_matches('/'),
@@ -34,12 +51,17 @@ impl ScmProvider for BitbucketProvider {
         )
         .with_context(|| {
             format!(
-                "Failed to fetch Bitbucket PR metadata for PR `{}` from `{}`.\n\n\
-Make sure these environment variables are set correctly:\n\
-- `BB_URL`\n\
-- `BB_TOKEN`\n\
-- `BB_PROJECT`\n\
-- `BB_REPO`",
+                "{RED_BOLD}Failed to fetch Bitbucket PR metadata{RESET} for PR `{}` from `{}`.\n\n\
+{YELLOW_BOLD}Make sure these settings are configured in `~/.pr-review/config.toml`:{RESET}\n\
+- `[bitbucket].url`\n\
+- `[bitbucket].project`\n\
+- `[bitbucket].repo`\n\
+{GREEN_BOLD}Or override them for this run with:{RESET}\n\
+- `--bb-url`\n\
+- `--bb-project`\n\
+- `--bb-repo`\n\
+{GREEN_BOLD}And make sure this environment variable is set:{RESET}\n\
+- `BB_TOKEN`",
                 pr_id, endpoint
             )
         })?;
@@ -50,8 +72,8 @@ Make sure these environment variables are set correctly:\n\
             .ok_or_else(|| anyhow!("Missing Bitbucket source branch in PR metadata"))?;
         let target_branch = pr_branch_name(&parsed, false)
             .ok_or_else(|| anyhow!("Missing Bitbucket destination branch in PR metadata"))?;
-        let repository = pr_repository_name(&parsed)
-            .unwrap_or_else(|| "unknown-repository".to_string());
+        let repository =
+            pr_repository_name(&parsed).unwrap_or_else(|| "unknown-repository".to_string());
 
         Ok(PrContext {
             metadata: format!(
@@ -63,10 +85,121 @@ Make sure these environment variables are set correctly:\n\
             target_branch,
         })
     }
+
+    fn resolve_pr_diff(
+        &self,
+        pr_id: &str,
+        common: &CommonArgs,
+        _context: &PrContext,
+    ) -> Result<String> {
+        let bb_url = resolve_setting(
+            common.bb_url.as_deref(),
+            "BB_URL",
+            user_config().bitbucket_url.as_deref(),
+            "bitbucket.url",
+        )?;
+        let bb_token = required_env("BB_TOKEN")?;
+        let bb_project = resolve_setting(
+            common.bb_project.as_deref(),
+            "BB_PROJECT",
+            user_config().bitbucket_project.as_deref(),
+            "bitbucket.project",
+        )?;
+        let bb_repo = resolve_setting(
+            common.bb_repo.as_deref(),
+            "BB_REPO",
+            user_config().bitbucket_repo.as_deref(),
+            "bitbucket.repo",
+        )?;
+        let endpoint = format!(
+            "{}/rest/api/1.0/projects/{}/repos/{}/pull-requests/{}/diff",
+            bb_url.trim_end_matches('/'),
+            bb_project,
+            bb_repo,
+            pr_id
+        );
+
+        run_command(
+            &common.repo_path,
+            "curl",
+            &[
+                "-s",
+                "-H",
+                &format!("Authorization: Bearer {bb_token}"),
+                "-H",
+                "Accept: text/plain",
+                &endpoint,
+            ],
+        )
+        .with_context(|| {
+            format!(
+                "{RED_BOLD}Failed to fetch Bitbucket PR diff{RESET} for PR `{}` from `{}`.\n\n\
+{YELLOW_BOLD}Make sure these settings are configured in `~/.pr-review/config.toml`:{RESET}\n\
+- `[bitbucket].url`\n\
+- `[bitbucket].project`\n\
+- `[bitbucket].repo`\n\
+{GREEN_BOLD}Or override them for this run with:{RESET}\n\
+- `--bb-url`\n\
+- `--bb-project`\n\
+- `--bb-repo`\n\
+{GREEN_BOLD}And make sure this environment variable is set:{RESET}\n\
+- `BB_TOKEN`",
+                pr_id, endpoint
+            )
+        })
+    }
 }
 
 fn required_env(name: &str) -> Result<String> {
-    env::var(name).with_context(|| format!("Required Bitbucket environment variable `{name}` is not set"))
+    env::var(name).with_context(|| {
+        format!("{RED_BOLD}Required Bitbucket environment variable {BLACK_BOLD}`{name}`{RED_BOLD} is not set{RESET}")
+    })
+}
+
+fn resolve_setting(
+    cli_value: Option<&str>,
+    env_name: &str,
+    config_value: Option<&str>,
+    config_name: &str,
+) -> Result<String> {
+    if let Some(value) = non_empty(cli_value) {
+        return Ok(value.to_string());
+    }
+
+    if let Some(value) = env::var(env_name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
+        return Ok(value);
+    }
+
+    if let Some(value) = non_empty(config_value) {
+        return Ok(value.to_string());
+    }
+
+    anyhow::bail!(
+        "{RED_BOLD}Required Bitbucket setting is missing.{RESET}\n\
+Set one of:\n\
+{BLUE}- CLI override: {BLACK_BOLD}`--{}`{RESET}\n\
+{BLUE}- environment variable: {BLACK_BOLD}`{}`{RESET}\n\
+{BLUE}- config key in {BLACK_BOLD}`~/.pr-review/config.toml`{RESET}: {BLACK_BOLD}`{}`{RESET}",
+        cli_flag_name(env_name),
+        env_name,
+        config_name,
+    )
+}
+
+fn non_empty(value: Option<&str>) -> Option<&str> {
+    value.filter(|value| !value.trim().is_empty())
+}
+
+fn cli_flag_name(env_name: &str) -> &'static str {
+    match env_name {
+        "BB_URL" => "bb-url",
+        "BB_PROJECT" => "bb-project",
+        "BB_REPO" => "bb-repo",
+        _ => "unknown",
+    }
 }
 
 fn pr_branch_name(pr: &Value, source: bool) -> Option<String> {

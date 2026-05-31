@@ -1,9 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 
 use crate::artifacts::run_command;
 use crate::cli::CommonArgs;
 use crate::scm::{PrContext, ScmProvider};
+use crate::ui::{BLUE, GREEN_BOLD, RED_BOLD, RESET, YELLOW_BOLD};
 
 pub struct CodeCommitProvider;
 
@@ -47,6 +48,68 @@ impl ScmProvider for CodeCommitProvider {
             source_branch,
             target_branch,
         })
+    }
+
+    fn resolve_pr_diff(
+        &self,
+        _pr_id: &str,
+        common: &CommonArgs,
+        context: &PrContext,
+    ) -> Result<String> {
+        run_command(
+            &common.repo_path,
+            "git",
+            &["fetch", &common.remote, &context.source_branch],
+        )
+        .with_context(|| {
+            format!(
+                "{RED_BOLD}Failed to fetch source branch{RESET} `{}` {RED_BOLD}from remote{RESET} `{}` {RED_BOLD}in{RESET} `{}`.\n\n\
+{YELLOW_BOLD}This usually means:{BLUE}\n\
+- `--repo-path` points to the wrong repository\n\
+- `--remote` is not the configured remote for this PR\n\
+- the source branch was deleted after the PR was opened\n\n\
+{GREEN_BOLD}Try checking:{BLUE}\n\
+- the repository path\n\
+- `git remote -v`\n\
+- whether the branch exists on that remote",
+                context.source_branch,
+                common.remote,
+                common.repo_path.display()
+            )
+        })?;
+
+        run_command(
+            &common.repo_path,
+            "git",
+            &["fetch", &common.remote, &context.target_branch],
+        )
+        .with_context(|| {
+            format!(
+                "{RED_BOLD}Failed to fetch destination branch{RESET} `{}` {RED_BOLD}from remote{RESET} `{}` {RED_BOLD}in{RESET} `{}`.\n\n\
+{YELLOW_BOLD}This usually means:{BLUE}\n\
+- `--repo-path` points to the wrong repository\n\
+- `--remote` is not the configured remote for this PR\n\
+- the destination branch no longer exists on that remote\n\n\
+{GREEN_BOLD}Try checking:{BLUE}\n\
+- the repository path\n\
+- `git remote -v`\n\
+- whether the branch exists on that remote",
+                context.target_branch,
+                common.remote,
+                common.repo_path.display()
+            )
+        })?;
+
+        run_command(
+            &common.repo_path,
+            "git",
+            &[
+                "diff",
+                &format!("{}/{}", common.remote, context.target_branch),
+                &format!("{}/{}", common.remote, context.source_branch),
+                "--",
+            ],
+        )
     }
 }
 
