@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 default-run = "pr-review"
 
+[features]
+default = ["copilot-sdk"]
+copilot-sdk = []
+
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
@@ -16,3 +20,6 @@ ratatui = "0.30.0"
 crossterm = "0.29.0"
 pulldown-cmark = "0.13.4"
 termimad = "0.34.1"
+github-copilot-sdk = "0.1.0"
+tokio = { version = "1", features = ["macros", "rt", "time"] }
+ctrlc = "3.4.7"

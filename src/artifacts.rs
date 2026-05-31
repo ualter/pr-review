@@ -185,6 +185,8 @@ pub fn ai_run_debug_mode(tool: &AiTool, prompt: &str) -> &'static str {
             "copilot streaming via temp-file prompt shim"
         }
         AiTool::Copilot => "copilot streaming via direct CLI argument",
+        #[cfg(feature = "copilot-sdk")]
+        AiTool::CopilotSdk => "copilot sdk backend (feature-gated scaffold)",
         AiTool::Codex => "codex streaming via stdin",
     }
 }
@@ -229,6 +231,10 @@ where
                 })
             }
         }
+        #[cfg(feature = "copilot-sdk")]
+        AiTool::CopilotSdk => anyhow::bail!(
+            "Copilot SDK backend is feature-gated scaffolding in this build and should be selected through `backend_for_tool`, not `run_ai_tool_streaming`."
+        ),
         AiTool::Codex => Ok(AiRunResult {
             output: run_command_with_stdin_streaming(
                 Path::new("."),

@@ -5,13 +5,16 @@ SHELL = /usr/bin/env bash -o pipefail
 repo_path := /home/ualter/developer/repos/codecommit/datahub-code/datahub-backend-dev/
 
 help:  ## Display this help
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-18s\033[33m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-30s\033[33m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 
 ##@ --| BUILD  |--------------------------------------------------------------------------------------------------------------------------------------
 
 build:  ## Build the project
 	cargo build --release --bin pr-review
+
+build-without-copilot-sdk:  ## Build the project without GitHub Copilot SDK support (feature flag)
+	cargo build --release --bin pr-review  --no-default-features
 
 banner:  ## Display the startup banner
 	cargo run --release banner
@@ -29,7 +32,10 @@ review-commit: ## Review a CodeCommit Commit  (usage: make review-commit AI=copi
 	cargo run --release commit 5ceeb10f2c37a9d85d6ce26ba31d0f080e352603 --ai $(AI) --repo-path $(repo_path)
 
 dist-local: build  ## Build the project and prepare a local distribution
-	cargo build --release --bin pr-review
+	mkdir -p ~/.local/bin
+	cp target/release/pr-review ~/.local/bin/
+
+dist-local-without-copilot-sdk: build-without-copilot-sdk  ## Build without Copilot SDK and prepare a local distribution
 	mkdir -p ~/.local/bin
 	cp target/release/pr-review ~/.local/bin/
 

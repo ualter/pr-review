@@ -11,7 +11,7 @@ use std::{
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     thread,
     time::Duration,
@@ -38,6 +38,11 @@ pub const LINE: &str =
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+pub fn restore_cursor() {
+    print!("\x1b[?25h");
+    let _ = io::stdout().flush();
+}
+
 pub fn print_header(repository: &str, source: &str, target: &str, review_branch: &str) {
     println!("{LINE}");
     println!("{}Repository: {}{}", GREEN_BOLD, repository, RESET);
@@ -49,6 +54,7 @@ pub fn print_header(repository: &str, source: &str, target: &str, review_branch:
 
 pub struct SpinnerHandle {
     stop: Arc<AtomicBool>,
+    status: Arc<Mutex<Option<String>>>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -58,6 +64,14 @@ impl SpinnerHandle {
 
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
+        }
+
+        restore_cursor();
+    }
+
+    pub fn set_status(&self, status: impl Into<String>) {
+        if let Ok(mut slot) = self.status.lock() {
+            *slot = Some(status.into());
         }
     }
 }
@@ -101,6 +115,15 @@ pub fn print_artifacts(
         archived_prompt_path.display(),
         RESET
     );
+    if let Ok(metadata) = std::fs::metadata(archived_prompt_path) {
+        println!(
+            "{}Prompt size:       {}{}{}",
+            BLACK_BOLD,
+            BLUE_BOLD,
+            format_approx_bytes(metadata.len()),
+            RESET
+        );
+    }
     println!("{LINE}");
     if ai.is_none() {
         println!("{BLACK_BOLD}Run manually with one of:{RESET}");
@@ -112,6 +135,20 @@ pub fn print_artifacts(
             );
         }
         println!("{LINE}");
+    }
+}
+
+fn format_approx_bytes(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+
+    let bytes_f64 = bytes as f64;
+    if bytes_f64 >= MB {
+        format!("~{:.1} MB", bytes_f64 / MB)
+    } else if bytes_f64 >= KB {
+        format!("~{:.1} KB", bytes_f64 / KB)
+    } else {
+        format!("~{} B", bytes)
     }
 }
 
@@ -145,36 +182,83 @@ pub fn start_spinner(icon: &str, message: impl Into<String>) -> SpinnerHandle {
     let icon = icon.to_string();
     let message = message.into();
 
+    print!("\x1b[?25l");
+    let _ = io::stdout().flush();
+
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = Arc::clone(&stop);
+    let status = Arc::new(Mutex::new(None));
+    let status_thread = Arc::clone(&status);
 
     let handle = thread::spawn(move || {
         let chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let time_icon = [
+            "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛",
+        ];
         let mut i = 0;
+        let mut last_visible_len = 0usize;
+        let started_at = std::time::Instant::now();
 
         while !stop_thread.load(Ordering::Relaxed) {
+            let suffix = status_thread
+                .lock()
+                .ok()
+                .and_then(|slot| slot.clone())
+                .filter(|value: &String| !value.is_empty())
+                .map(|value| format!(" {BLACK_BOLD}{value}{RESET}"))
+                .unwrap_or_default();
+            let elapsed = format!(
+                "{} {}",
+                time_icon[i % time_icon.len()],
+                format_elapsed(started_at.elapsed())
+            );
+            let visible_line = format!(
+                "{} {} {}{} {}",
+                chars[i % chars.len()],
+                icon,
+                message,
+                suffix,
+                elapsed
+            );
+            let padding = " ".repeat(last_visible_len.saturating_sub(visible_line.chars().count()));
             print!(
-                "\r{} {}{} {}{}",
+                "\r{}{}{} {} {}{}{}{} {}{}{}",
+                YELLOW_BOLD,
+                chars[i % chars.len()],
+                RESET,
                 icon,
                 YELLOW,
                 message,
-                chars[i % chars.len()],
-                RESET
+                suffix,
+                BLUE_BOLD,
+                elapsed,
+                RESET,
+                padding,
             );
             let _ = io::stdout().flush();
 
+            last_visible_len = visible_line.chars().count();
             i += 1;
             thread::sleep(Duration::from_millis(100));
         }
 
-        print!("\r{}\r", " ".repeat(120));
+        print!("\r{}\r", " ".repeat(last_visible_len.max(1)));
         let _ = io::stdout().flush();
     });
 
     SpinnerHandle {
         stop,
+        status,
         handle: Some(handle),
     }
+}
+
+fn format_elapsed(elapsed: Duration) -> String {
+    let total = elapsed.as_secs();
+    let hours = total / 3600;
+    let minutes = (total % 3600) / 60;
+    let seconds = total % 60;
+    format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
 pub fn render_interactive_prompt(tool: &AiTool) -> String {

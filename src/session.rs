@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::ai_backend::{AiBackend, AiEvent, CliAiBackend};
+use crate::ai_backend::{backend_for_tool, AiEvent};
 use crate::{
     artifacts::{load_review_meta, AiRunResult},
     cli::{AiTool, ReviewInput},
@@ -247,7 +247,7 @@ fn process_user_question(
     session.append_user_message(actual_question)?;
     let context = select_context_for_question(session, input, actual_question, force_full_diff)?;
     let prompt = build_chat_prompt(input, actual_question, &context);
-    let backend = CliAiBackend::new(tool);
+    let backend = backend_for_tool(tool);
     let spinner_label = format!("{} is thinking...", tool.display_name());
     let mut spinner = Some(start_spinner(
         tool.status_icon(),
@@ -272,7 +272,13 @@ fn process_user_question(
                     println!();
                 }
                 println!("{YELLOW}[debug]{RESET} {message}");
-                spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+                if !streamed_anything {
+                    spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+                }
+            } else if tool.shows_live_status_updates() {
+                if let Some(active_spinner) = spinner.as_ref() {
+                    active_spinner.set_status(message);
+                }
             }
         }
         AiEvent::Failed(message) => {
@@ -282,6 +288,10 @@ fn process_user_question(
                     println!();
                 }
                 println!("{YELLOW}[debug]{RESET} failure: {message}");
+            } else if tool.shows_live_status_updates() {
+                if let Some(active_spinner) = spinner.as_ref() {
+                    active_spinner.set_status(format!("failure: {message}"));
+                }
             }
         }
         AiEvent::Started | AiEvent::Finished => {}
@@ -438,7 +448,7 @@ fn append_message(path: &Path, role: &str, message: &str) -> Result<()> {
 }
 
 fn run_ai_tool_silently(tool: &AiTool, prompt: &str) -> Result<AiRunResult> {
-    let backend = CliAiBackend::new(tool);
+    let backend = backend_for_tool(tool);
     let output = backend.run_review(prompt, &mut |_| {})?;
     Ok(AiRunResult { output })
 }

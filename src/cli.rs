@@ -155,6 +155,9 @@ pub struct CommonArgs {
 pub enum AiTool {
     /// GitHub Copilot CLI (`copilot -p`)
     Copilot,
+    /// GitHub Copilot SDK backend (feature-gated experimental path)
+    #[cfg(feature = "copilot-sdk")]
+    CopilotSdk,
     /// OpenAI Codex CLI (`codex`)
     Codex,
 }
@@ -163,6 +166,8 @@ impl AiTool {
     pub fn display_name(&self) -> &'static str {
         match self {
             AiTool::Copilot => "Copilot",
+            #[cfg(feature = "copilot-sdk")]
+            AiTool::CopilotSdk => "Copilot SDK",
             AiTool::Codex => "Codex",
         }
     }
@@ -173,6 +178,11 @@ impl AiTool {
                 .copilot_icon
                 .as_deref()
                 .unwrap_or("🧑‍✈️"),
+            #[cfg(feature = "copilot-sdk")]
+            AiTool::CopilotSdk => user_config()
+                .copilot_icon
+                .as_deref()
+                .unwrap_or("🧑‍✈️"),
             AiTool::Codex => user_config()
                 .codex_icon
                 .as_deref()
@@ -180,9 +190,23 @@ impl AiTool {
         }
     }
 
+    pub fn shows_live_status_updates(&self) -> bool {
+        match self {
+            AiTool::Copilot => false,
+            #[cfg(feature = "copilot-sdk")]
+            AiTool::CopilotSdk => true,
+            AiTool::Codex => false,
+        }
+    }
+
     pub fn manual_hint(&self, prompt_path: &std::path::Path) -> String {
         match self {
             AiTool::Copilot => format!("copilot -p \"$(cat {})\"", prompt_path.display()),
+            #[cfg(feature = "copilot-sdk")]
+            AiTool::CopilotSdk => format!(
+                "This build includes the experimental Copilot SDK backend; no manual CLI equivalent is exposed for {}.",
+                prompt_path.display()
+            ),
             AiTool::Codex => format!("codex review - < {}", prompt_path.display()),
         }
     }
@@ -190,11 +214,26 @@ impl AiTool {
     pub fn from_config_value(value: &str) -> Result<Self> {
         match value.trim().to_lowercase().as_str() {
             "copilot" => Ok(AiTool::Copilot),
+            #[cfg(feature = "copilot-sdk")]
+            "copilot-sdk" | "copilotsdk" => Ok(AiTool::CopilotSdk),
             "codex" => Ok(AiTool::Codex),
             other => Err(anyhow!(
-                "Invalid AI tool `{other}` in config. Expected `copilot` or `codex`."
+                "Invalid AI tool `{other}` in config. Expected {}.",
+                expected_ai_tool_values()
             )),
         }
+    }
+}
+
+fn expected_ai_tool_values() -> &'static str {
+    #[cfg(feature = "copilot-sdk")]
+    {
+        "`copilot`, `codex`, or `copilot-sdk`"
+    }
+
+    #[cfg(not(feature = "copilot-sdk"))]
+    {
+        "`copilot` or `codex`"
     }
 }
 

@@ -11,7 +11,7 @@ mod scm;
 mod session;
 mod ui;
 
-use ai_backend::{AiBackend, AiEvent, CliAiBackend};
+use ai_backend::{backend_for_tool, AiEvent};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use std::{
@@ -29,7 +29,8 @@ use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
 use session::resume_interactive_session;
 use ui::{
-    print_artifacts, print_header, print_report, start_spinner, GREEN, GREEN_BOLD, RESET, YELLOW,
+    print_artifacts, print_header, print_report, restore_cursor, start_spinner, GREEN,
+    GREEN_BOLD, RESET, YELLOW,
 };
 
 use crate::{
@@ -41,6 +42,13 @@ use crate::{
 };
 
 fn main() -> Result<()> {
+    ctrlc::set_handler(|| {
+        restore_cursor();
+        println!();
+        std::process::exit(130);
+    })
+    .context("Failed to install CTRL+C handler")?;
+
     let start = Instant::now();
     let cli = Cli::parse();
 
@@ -268,10 +276,11 @@ fn run_review_flow(
     );
 
     if let Some(tool) = &common.ai {
-        println!(
-            "{YELLOW}Sending prompt to {}...{RESET}",
+        print!(
+            "\r{YELLOW}Sending prompt to {}...{RESET}",
             tool.display_name()
         );
+        io::stdout().flush()?;
 
         let ai_start = Instant::now();
 
@@ -282,8 +291,8 @@ fn run_review_flow(
             prompt_arg
         };
 
-        let backend = CliAiBackend::new(tool);
-        let spinner_label = format!("{} is reviewing...", tool.display_name());
+        let backend = backend_for_tool(tool);
+        let spinner_label = format!("{} is reviewing:", tool.display_name());
         let mut spinner_handler = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
         let mut streamed_anything = false;
         let review = backend.run_review(&prompt_arg, &mut |event| match event {
@@ -304,8 +313,14 @@ fn run_review_flow(
                         println!();
                     }
                     println!("{YELLOW}[debug]{RESET} {message}");
-                    spinner_handler =
-                        Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+                    if !streamed_anything {
+                        spinner_handler =
+                            Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+                    }
+                } else if tool.shows_live_status_updates() {
+                    if let Some(active_spinner) = spinner_handler.as_ref() {
+                        active_spinner.set_status(message);
+                    }
                 }
             }
             AiEvent::Failed(message) => {
@@ -315,6 +330,10 @@ fn run_review_flow(
                         println!();
                     }
                     println!("{YELLOW}[debug]{RESET} failure: {message}");
+                } else if tool.shows_live_status_updates() {
+                    if let Some(active_spinner) = spinner_handler.as_ref() {
+                        active_spinner.set_status(format!("failure: {message}"));
+                    }
                 }
             }
             AiEvent::Started | AiEvent::Finished => {}
