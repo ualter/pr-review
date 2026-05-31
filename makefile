@@ -11,7 +11,7 @@ help:  ## Display this help
 ##@ --| BUILD  |--------------------------------------------------------------------------------------------------------------------------------------
 
 build:  ## Build the project
-	cargo build --release
+	cargo build --release --bin pr-review
 
 banner:  ## Display the startup banner
 	cargo run --release banner
@@ -22,11 +22,14 @@ doctor:  ## Check local environment and external CLI dependencies
 review-pr: ## Review a CodeCommit Pull Request  (usage: make review-pr AI=copilot|codex)
 	cargo run --release pr 4663 --ai $(AI) --repo-path $(repo_path)
 
+run-banner-lab: ## Run the banner lab (experimental)
+	cargo run --bin banner_lab
+
 review-commit: ## Review a CodeCommit Commit  (usage: make review-commit AI=copilot|codex)
 	cargo run --release commit 5ceeb10f2c37a9d85d6ce26ba31d0f080e352603 --ai $(AI) --repo-path $(repo_path)
 
 dist-local: build  ## Build the project and prepare a local distribution
-	cargo build --release
+	cargo build --release --bin pr-review
 	mkdir -p ~/.local/bin
 	cp target/release/pr-review ~/.local/bin/
 

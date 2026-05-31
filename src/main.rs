@@ -23,9 +23,7 @@ use artifacts::{
 };
 use cli::{Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
 use config::{init_user_config, load_user_config, set_user_config, ConfigInitStatus};
-use prompt_profile::{
-    init_user_prompt_profiles, resolve_prompt_profile, PromptInitStatus,
-};
+use prompt_profile::{init_user_prompt_profiles, resolve_prompt_profile, PromptInitStatus};
 use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
 use session::resume_interactive_session;
@@ -37,7 +35,7 @@ use crate::{
     artifacts::{list_review_sessions, select_review_session},
     cli::SessionCommand,
     markdown_viewer::open_markdown_text,
-    ui::{print_sessions, print_startup_banner},
+    ui::{print_sessions, BannerType},
 };
 
 const TESTING: bool = false;
@@ -56,7 +54,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Some(Commands::Banner) => {
-            ui::print_startup_banner();
+            ui::print_startup_banner(Some(BannerType::Advanced));
             Ok(())
         }
 
@@ -65,10 +63,9 @@ fn main() -> Result<()> {
                 let (path, status) = init_user_config()?;
 
                 match status {
-                    ConfigInitStatus::Created => println!(
-                        "{GREEN_BOLD}Created config file:{RESET} {}",
-                        path.display()
-                    ),
+                    ConfigInitStatus::Created => {
+                        println!("{GREEN_BOLD}Created config file:{RESET} {}", path.display())
+                    }
                     ConfigInitStatus::Updated => println!(
                         "{YELLOW}Found existing config and added missing parameters:{RESET} {}",
                         path.display()
@@ -182,7 +179,7 @@ fn main() -> Result<()> {
                 let review_name = match review_name {
                     Some(name) => name,
                     None => {
-                        print_startup_banner();
+                        // print_startup_banner(Some(BannerType::Banner02));
                         select_review_session()?
                     }
                 };
@@ -206,9 +203,7 @@ fn main() -> Result<()> {
 
         Some(Commands::Pr { pr_id, scm, common }) => {
             let common = apply_default_ai(common, &config);
-            let scm = scm
-                .or(config.default_scm)
-                .unwrap_or(ScmKind::CodeCommit);
+            let scm = scm.or(config.default_scm).unwrap_or(ScmKind::CodeCommit);
             let input = review_pr(&pr_id, scm, &common)?;
 
             run_review_flow(input, common, Some(scm), start)

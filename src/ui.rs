@@ -238,15 +238,35 @@ pub fn print_interactive_help(tool: &AiTool) {
     println!("{LINE}");
 }
 
-pub fn print_startup_banner() {
-    print_banner(true);
+#[allow(dead_code)]
+pub enum BannerType {
+    Advanced,
+    Banner01,
+    Banner02,
+}
+
+pub fn print_startup_banner(which_banner: Option<BannerType>) {
+    print_banner(true, which_banner);
 }
 
 pub fn print_version_banner() {
-    print_banner(false);
+    print_banner(false, Some(BannerType::Banner01));
 }
 
-fn print_banner(clear_screen: bool) {
+#[allow(dead_code)]
+fn print_banner(clear_screen: bool, which_banner: Option<BannerType>) {
+    if clear_screen {
+        // Clear screen (and scrollback where supported) before starting the animation.
+        print!("\x1b[2J\x1b[H\x1b[3J");
+    }
+    match which_banner.unwrap_or(BannerType::Advanced) {
+        BannerType::Advanced => print_advanced_banner_animation(),
+        BannerType::Banner01 => print_banner_01(),
+        BannerType::Banner02 => print_banner_02(),
+    }
+}
+
+fn print_banner_01() {
     let frames = [
         include_str!("../assets/banner_01/frame_01.txt"),
         include_str!("../assets/banner_01/frame_02.txt"),
@@ -267,41 +287,187 @@ fn print_banner(clear_screen: bool) {
         include_str!("../assets/banner_01/frame_17.txt"),
     ];
 
-    if clear_screen {
-        print!("\x1b[H");
-        print!("\x1b[2J");
-    } else {
-        println!();
-        println!("{BLUE_BOLD}{LINE}{RESET}");
-    }
+    println!();
+    println!("{BLUE_BOLD}{LINE}{RESET}");
 
     print!("\x1b[?25l");
     let _ = std::io::stdout().flush();
 
     for frame in frames {
-        if clear_screen {
-            print!("\x1b[H");
-            println!("{GREEN_BOLD}{frame}{RESET}");
-        } else {
-            print!("\r\x1b[2K{GREEN_BOLD}{frame}{RESET}");
-            let _ = std::io::stdout().flush();
-        }
+        print!("\r\x1b[2K{GREEN_BOLD}{frame}{RESET}");
         let _ = std::io::stdout().flush();
-        std::thread::sleep(std::time::Duration::from_millis(70));
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 
     print!("\x1b[?25h");
     let _ = std::io::stdout().flush();
 
-    if !clear_screen {
-        println!();
-    }
-
+    println!();
     println!("  {BLACK_BOLD} AI-Assisted Engineering Review CLI{RESET}");
     print_version_reveal();
-    if !clear_screen {
-        println!("{BLUE_BOLD}{LINE}{RESET}");
+    println!("{BLUE_BOLD}{LINE}{RESET}");
+}
+
+#[allow(dead_code)]
+fn print_banner_02() {
+    let logo = ["👉 PR-REVIEW"];
+
+    let max_width = logo
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    print!("\x1b[2J\x1b[H");
+    print!("\x1b[?25l");
+    let _ = io::stdout().flush();
+
+    for reveal in (0..=max_width).step_by(3) {
+        print!("\x1b[H");
+        print!("\n\n");
+
+        for line in logo {
+            let line_len = line.chars().count();
+            let visible_len = reveal.min(line_len);
+            let trailing_spaces = max_width.saturating_sub(visible_len);
+            let mut rendered = String::new();
+
+            for (i, ch) in line.chars().take(visible_len).enumerate() {
+                let is_edge = i + 4 >= visible_len;
+                rendered.push_str(if is_edge { FG_WHITE_BOLD } else { GREEN_BOLD });
+                rendered.push(ch);
+            }
+
+            rendered.push_str(RESET);
+            rendered.push_str(&" ".repeat(trailing_spaces));
+            rendered.push('\n');
+            print!("{rendered}");
+        }
+
+        let _ = io::stdout().flush();
+        thread::sleep(Duration::from_millis(120));
     }
+
+    let glow_window = 4usize;
+    let glow_step = 1usize;
+    let glow_frames = max_width + glow_window;
+
+    for head in (0..=glow_frames).step_by(glow_step) {
+        let highlight_start = head.saturating_sub(glow_window);
+        let highlight_end = head;
+
+        print!("\x1b[H");
+        print!("\n\n");
+
+        for line in logo {
+            let line_len = line.chars().count();
+            let mut rendered = String::new();
+
+            for (i, ch) in line.chars().enumerate() {
+                let color = if (highlight_start..highlight_end).contains(&i) {
+                    YELLOW_BOLD
+                } else {
+                    GREEN_BOLD
+                };
+                rendered.push_str(color);
+                rendered.push(ch);
+            }
+
+            rendered.push_str(RESET);
+            rendered.push_str(&" ".repeat(max_width.saturating_sub(line_len)));
+            rendered.push('\n');
+            print!("{rendered}");
+        }
+
+        let _ = io::stdout().flush();
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    print!("\x1b[?25h");
+    print!("{RESET}\n");
+    let _ = io::stdout().flush();
+}
+
+fn print_advanced_banner_animation() {
+    const LOGO: [&str; 7] = [
+        r"██████╗ ██████╗       ██████╗ ███████╗██╗   ██╗██╗███████╗██╗    ██╗",
+        r"██╔══██╗██╔══██╗      ██╔══██╗██╔════╝██║   ██║██║██╔════╝██║    ██║",
+        r"██████╔╝██████╔╝█████╗██████╔╝█████╗  ██║   ██║██║█████╗  ██║ █╗ ██║",
+        r"██╔═══╝ ██╔══██╗╚════╝██╔══██╗██╔══╝  ╚██╗ ██╔╝██║██╔══╝  ██║███╗██║",
+        r"██║     ██║  ██║      ██║  ██║███████╗ ╚████╔╝ ██║███████╗╚███╔███╔╝",
+        r"╚═╝     ╚═╝  ╚═╝      ╚═╝  ╚═╝╚══════╝  ╚═══╝  ╚═╝╚══════╝ ╚══╝╚══╝",
+        r"                           pr-review",
+    ];
+
+    let max_width = LOGO
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    print!("\x1b[?25l");
+    let _ = std::io::stdout().flush();
+
+    for reveal in (0..=max_width).step_by(3) {
+        print!("\x1b[H");
+        print!("\n\n");
+        for line in LOGO {
+            let line_len = line.chars().count();
+            let visible_len = reveal.min(line_len);
+            let trailing_spaces = max_width.saturating_sub(visible_len);
+            let mut rendered = String::new();
+
+            for (i, ch) in line.chars().take(visible_len).enumerate() {
+                let is_edge = i + 4 >= visible_len;
+                rendered.push_str(if is_edge { FG_WHITE_BOLD } else { GREEN_BOLD });
+                rendered.push(ch);
+            }
+
+            rendered.push_str(RESET);
+            rendered.push_str(&" ".repeat(trailing_spaces));
+            rendered.push('\n');
+            print!("{rendered}");
+        }
+        let _ = std::io::stdout().flush();
+        std::thread::sleep(std::time::Duration::from_millis(35));
+    }
+
+    let glow_window = 14usize;
+    let glow_step = 2usize;
+    let glow_frames = max_width + glow_window;
+
+    for head in (0..=glow_frames).step_by(glow_step) {
+        let highlight_start = head.saturating_sub(glow_window);
+        let highlight_end = head;
+        print!("\x1b[H");
+        print!("\n\n");
+        for line in LOGO {
+            let line_len = line.chars().count();
+            let mut rendered = String::new();
+            for (i, ch) in line.chars().enumerate() {
+                let color = if (highlight_start..highlight_end).contains(&i) {
+                    YELLOW_BOLD
+                } else {
+                    GREEN_BOLD
+                };
+                rendered.push_str(color);
+                rendered.push(ch);
+            }
+            rendered.push_str(RESET);
+            rendered.push_str(&" ".repeat(max_width.saturating_sub(line_len)));
+            rendered.push('\n');
+            print!("{rendered}");
+        }
+        let _ = std::io::stdout().flush();
+        std::thread::sleep(std::time::Duration::from_millis(22));
+    }
+
+    print!("\x1b[?25h");
+    let _ = std::io::stdout().flush();
+
+    println!();
+    println!("  {BLACK_BOLD} AI-Assisted Engineering Review CLI{RESET}");
+    print_version_reveal();
 }
 
 fn print_version_reveal() {
