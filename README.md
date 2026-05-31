@@ -143,6 +143,12 @@ pr-review commit 8f31c2a --repo-path ~/repos/backend
 
 ### Session Commands
 
+Resume with the interactive picker:
+
+```bash
+pr-review session
+```
+
 List resumable sessions:
 
 ```bash
@@ -152,16 +158,18 @@ pr-review session list
 Resume a session by name:
 
 ```bash
+pr-review session codecommit-pr-4669 --ai codex
 pr-review session resume codecommit-pr-4669 --ai codex
 ```
 
 Resume using the configured default AI:
 
 ```bash
+pr-review session codecommit-pr-4669
 pr-review session resume codecommit-pr-4669
 ```
 
-Resume with the interactive picker:
+Explicit resume form:
 
 ```bash
 pr-review session resume

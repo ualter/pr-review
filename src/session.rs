@@ -275,10 +275,10 @@ fn process_user_question(
                 if !streamed_anything {
                     spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
                 }
-            } else if tool.shows_live_status_updates() {
-                if let Some(active_spinner) = spinner.as_ref() {
-                    active_spinner.set_status(message);
-                }
+            } else if tool.shows_live_status_updates()
+                && let Some(active_spinner) = spinner.as_ref()
+            {
+                active_spinner.set_status(message);
             }
         }
         AiEvent::Failed(message) => {
@@ -288,10 +288,10 @@ fn process_user_question(
                     println!();
                 }
                 println!("{YELLOW}[debug]{RESET} failure: {message}");
-            } else if tool.shows_live_status_updates() {
-                if let Some(active_spinner) = spinner.as_ref() {
-                    active_spinner.set_status(format!("failure: {message}"));
-                }
+            } else if tool.shows_live_status_updates()
+                && let Some(active_spinner) = spinner.as_ref()
+            {
+                active_spinner.set_status(format!("failure: {message}"));
             }
         }
         AiEvent::Started | AiEvent::Finished => {}

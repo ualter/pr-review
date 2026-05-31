@@ -584,7 +584,7 @@ pub fn print_sessions(sessions: &[std::path::PathBuf]) {
     for session in sessions {
         if let Some(name) = session.file_name().and_then(|n| n.to_str()) {
             println!("  {GREEN_BOLD}{name}{RESET}");
-            println!("    {BLACK_BOLD}Resume:{RESET} pr-review session resume {name} --ai codex");
+            println!("    {BLACK_BOLD}Resume:{RESET} pr-review session {name} --ai codex");
         }
     }
 

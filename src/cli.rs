@@ -65,7 +65,14 @@ pub enum Commands {
     /// Manage interactive review sessions
     Session {
         #[command(subcommand)]
-        command: SessionCommand,
+        command: Option<SessionCommand>,
+
+        /// Existing review name. If omitted, an interactive picker is shown.
+        review_name: Option<String>,
+
+        /// AI tool used for the interactive session
+        #[arg(long, value_name = "TOOL")]
+        ai: Option<AiTool>,
     },
 }
 

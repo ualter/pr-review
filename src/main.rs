@@ -174,8 +174,12 @@ fn main() -> Result<()> {
             Ok(())
         }
 
-        Some(Commands::Session { command }) => match command {
-            SessionCommand::List => {
+        Some(Commands::Session {
+            command,
+            review_name,
+            ai,
+        }) => match command {
+            Some(SessionCommand::List) => {
                 let sessions = list_review_sessions()?;
                 let session_paths: Vec<std::path::PathBuf> =
                     sessions.into_iter().map(std::path::PathBuf::from).collect();
@@ -183,13 +187,35 @@ fn main() -> Result<()> {
                 Ok(())
             }
 
-            SessionCommand::Resume { review_name, ai } => {
+            Some(SessionCommand::Resume { review_name, ai }) => {
                 let review_name = match review_name {
                     Some(name) => name,
                     None => {
                         // print_startup_banner(Some(BannerType::Banner02));
                         select_review_session()?
                     }
+                };
+
+                if review_name.is_empty() {
+                    println!("\n👋 {GREEN_BOLD}Session selection cancelled.{RESET}");
+                    return Ok(());
+                }
+
+                let ai = ai.or_else(|| config.default_ai.clone()).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No AI tool specified. Use `--ai <tool>` or set `default_ai = \"codex\"` in ~/.pr-review/config.toml."
+                    )
+                })?;
+
+                let artifact_dir = existing_review_artifact_dir(&review_name)?;
+                resume_interactive_session(&artifact_dir, &ai)?;
+                Ok(())
+            }
+
+            None => {
+                let review_name = match review_name {
+                    Some(name) => name,
+                    None => select_review_session()?,
                 };
 
                 if review_name.is_empty() {
@@ -317,10 +343,10 @@ fn run_review_flow(
                         spinner_handler =
                             Some(start_spinner(tool.status_icon(), spinner_label.clone()));
                     }
-                } else if tool.shows_live_status_updates() {
-                    if let Some(active_spinner) = spinner_handler.as_ref() {
-                        active_spinner.set_status(message);
-                    }
+                } else if tool.shows_live_status_updates()
+                    && let Some(active_spinner) = spinner_handler.as_ref()
+                {
+                    active_spinner.set_status(message);
                 }
             }
             AiEvent::Failed(message) => {
@@ -330,10 +356,10 @@ fn run_review_flow(
                         println!();
                     }
                     println!("{YELLOW}[debug]{RESET} failure: {message}");
-                } else if tool.shows_live_status_updates() {
-                    if let Some(active_spinner) = spinner_handler.as_ref() {
-                        active_spinner.set_status(format!("failure: {message}"));
-                    }
+                } else if tool.shows_live_status_updates()
+                    && let Some(active_spinner) = spinner_handler.as_ref()
+                {
+                    active_spinner.set_status(format!("failure: {message}"));
                 }
             }
             AiEvent::Started | AiEvent::Finished => {}

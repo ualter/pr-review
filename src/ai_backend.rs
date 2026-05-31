@@ -196,21 +196,22 @@ impl AiBackend for CopilotSdkBackend {
                                     }
                                 }
                                 SessionEventType::AssistantMessage => {
-                                    if let Some(data) = event.typed_data::<AssistantMessageData>() {
-                                        if !emitted_any_delta && !data.content.is_empty() {
-                                            streamed_text.push_str(&data.content);
-                                            emit(AiEvent::TextDelta(data.content));
-                                        }
+                                    if let Some(data) = event.typed_data::<AssistantMessageData>()
+                                        && !emitted_any_delta
+                                        && !data.content.is_empty()
+                                    {
+                                        streamed_text.push_str(&data.content);
+                                        emit(AiEvent::TextDelta(data.content));
                                     }
                                 }
                                 SessionEventType::AssistantIntent => {
-                                    if let Some(data) = event.typed_data::<AssistantIntentData>() {
-                                        if DEBUG {
-                                            emit(AiEvent::Status(format!(
-                                                "assistant.intent: {}",
-                                                data.intent
-                                            )));
-                                        }
+                                    if let Some(data) = event.typed_data::<AssistantIntentData>()
+                                        && DEBUG
+                                    {
+                                        emit(AiEvent::Status(format!(
+                                            "assistant.intent: {}",
+                                            data.intent
+                                        )));
                                     }
                                 }
                                 SessionEventType::AssistantTurnStart => {
@@ -251,18 +252,17 @@ impl AiBackend for CopilotSdkBackend {
                                 SessionEventType::AssistantReasoningDelta
                                     if !announced_reasoning =>
                                 {
-                                    if DEBUG {
-                                        if let Some(data) =
+                                    if DEBUG
+                                        && let Some(data) =
                                             event.typed_data::<AssistantReasoningDeltaData>()
-                                        {
-                                            let preview =
-                                                summarize_sdk_status(&data.delta_content, 120);
-                                            if !preview.is_empty() {
-                                                emit(AiEvent::Status(format!(
-                                                    "assistant.reasoning_delta: {}",
-                                                    preview
-                                                )));
-                                            }
+                                    {
+                                        let preview =
+                                            summarize_sdk_status(&data.delta_content, 120);
+                                        if !preview.is_empty() {
+                                            emit(AiEvent::Status(format!(
+                                                "assistant.reasoning_delta: {}",
+                                                preview
+                                            )));
                                         }
                                     }
                                     announced_reasoning = true;
@@ -291,27 +291,27 @@ impl AiBackend for CopilotSdkBackend {
                                     announced_streaming = true;
                                 }
                                 SessionEventType::SessionInfo => {
-                                    if let Some(data) = event.typed_data::<SessionInfoData>() {
-                                        if DEBUG {
-                                            let message = data
-                                                .tip
-                                                .map(|tip| format!("{} Tip: {}", data.message, tip))
-                                                .unwrap_or(data.message);
-                                            emit(AiEvent::Status(format!(
-                                                "session.info: {}",
-                                                message
-                                            )));
-                                        }
+                                    if let Some(data) = event.typed_data::<SessionInfoData>()
+                                        && DEBUG
+                                    {
+                                        let message = data
+                                            .tip
+                                            .map(|tip| format!("{} Tip: {}", data.message, tip))
+                                            .unwrap_or(data.message);
+                                        emit(AiEvent::Status(format!(
+                                            "session.info: {}",
+                                            message
+                                        )));
                                     }
                                 }
                                 SessionEventType::SessionWarning => {
-                                    if let Some(data) = event.typed_data::<SessionWarningData>() {
-                                        if DEBUG {
-                                            emit(AiEvent::Status(format!(
-                                                "session.warning: {}",
-                                                data.message
-                                            )));
-                                        }
+                                    if let Some(data) = event.typed_data::<SessionWarningData>()
+                                        && DEBUG
+                                    {
+                                        emit(AiEvent::Status(format!(
+                                            "session.warning: {}",
+                                            data.message
+                                        )));
                                     }
                                 }
                                 SessionEventType::SessionError => {

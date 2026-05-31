@@ -87,6 +87,9 @@ Resume commands:
 
 ```bash
 pr-review session list
+pr-review session
+pr-review session <review-name> --ai codex
+pr-review session <review-name>
 pr-review session resume <review-name> --ai codex
 pr-review session resume <review-name>
 pr-review session resume
@@ -95,6 +98,8 @@ pr-review session resume
 Behavior:
 
 - `session list` shows resumable sessions from `~/.pr-review/reports`
+- `session` without a subcommand opens the picker
+- `session <review-name>` resumes that session directly
 - `session resume <review-name>` continues that session
 - `session resume` without a name opens the picker
 - if `--ai` is omitted on resume, `default_ai` from config is used
