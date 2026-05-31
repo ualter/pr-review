@@ -10,7 +10,7 @@ The tool is opinionated. It is meant to behave more like a senior engineer revie
 
 - PR review from `codecommit` or `bitbucket`
 - Single-commit review from local Git
-- `copilot` and `codex` AI providers
+- `copilot`, `copilot-sdk`, and `codex` AI providers
 - Streaming AI output while the review is being generated
 - Automatic archive of prompts, diffs, reports, and session state
 - Interactive follow-up chat after the initial review
@@ -23,6 +23,7 @@ The tool is opinionated. It is meant to behave more like a senior engineer revie
 - Rust / Cargo
 - Git
 - `copilot` CLI if you want to use `--ai copilot`
+- GitHub Copilot CLI if you want to use `--ai copilot-sdk` (the SDK talks to the installed CLI runtime)
 - `codex` CLI if you want to use `--ai codex`
 - AWS CLI and a working AWS session for CodeCommit PR review
 - `curl` for Bitbucket PR review
@@ -104,7 +105,7 @@ Important options:
 - `--scm <codecommit|bitbucket>`: override the SCM provider for PR resolution
 - `--repo-path <PATH>`: repository path used for local Git operations and artifact context
 - `--remote <NAME>`: Git remote for CodeCommit/local Git fetches, default `origin`
-- `--ai <copilot|codex>`: run the AI automatically after generating artifacts
+- `--ai <copilot|copilot-sdk|codex>`: run the AI automatically after generating artifacts
 - `--no-interactive`: do not enter the interactive session after the review
 - `--bb-url <URL>`: override Bitbucket URL for this run
 - `--bb-project <KEY>`: override Bitbucket project for this run
@@ -129,7 +130,7 @@ Important options:
 
 - `--repo-path <PATH>`
 - `--remote <NAME>`
-- `--ai <copilot|codex>`
+- `--ai <copilot|copilot-sdk|codex>`
 - `--no-interactive`
 
 Examples:
@@ -244,6 +245,23 @@ The tool:
 9. enters the interactive session unless `--no-interactive` was passed
 
 If `--ai` is omitted, `pr-review` still generates and archives the diff, prompt, and metadata, but it does not run the AI and does not start an interactive session.
+
+## AI Runtime Notes
+
+- `copilot` and `codex` use the CLI backend.
+- `copilot-sdk` uses the GitHub Copilot SDK session API and still requires the installed Copilot CLI runtime.
+- AI output streams progressively while a review or interactive answer is being generated.
+- The progress spinner shows:
+  - a live status suffix during processing
+  - elapsed time in `HH:MM:SS`
+  - the cursor is hidden while processing and restored when processing finishes or when the process is interrupted with `CTRL+C`
+
+Examples:
+
+```bash
+pr-review pr 4669 --repo-path ~/repos/backend --scm codecommit --ai copilot-sdk
+pr-review commit 8f31c2a --repo-path ~/repos/backend --ai copilot-sdk
+```
 
 ## SCM Behavior
 
