@@ -9,7 +9,7 @@ mod session;
 mod ui;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use std::{
     fs,
     io::{self, Write},
@@ -40,16 +40,22 @@ const TESTING: bool = false;
 fn main() -> Result<()> {
     let start = Instant::now();
     let cli = Cli::parse();
+
+    if cli.version {
+        ui::print_startup_banner();
+        return Ok(());
+    }
+
     let config = load_user_config()?;
     set_user_config(config.clone());
 
     match cli.command {
-        Commands::Banner => {
+        Some(Commands::Banner) => {
             ui::print_startup_banner();
             Ok(())
         }
 
-        Commands::Config { command } => match command {
+        Some(Commands::Config { command }) => match command {
             ConfigCommand::Init => {
                 let (path, status) = init_user_config()?;
 
@@ -72,12 +78,12 @@ fn main() -> Result<()> {
             }
         },
 
-        Commands::Doctor => {
+        Some(Commands::Doctor) => {
             doctor::run_doctor(std::path::Path::new("."))?;
             Ok(())
         }
 
-        Commands::Session { command } => match command {
+        Some(Commands::Session { command }) => match command {
             SessionCommand::List => {
                 let sessions = list_review_sessions()?;
                 let session_paths: Vec<std::path::PathBuf> =
@@ -112,7 +118,7 @@ fn main() -> Result<()> {
             }
         },
 
-        Commands::Pr { pr_id, scm, common } => {
+        Some(Commands::Pr { pr_id, scm, common }) => {
             let common = apply_default_ai(common, &config);
             let scm = scm
                 .or(config.default_scm)
@@ -122,11 +128,17 @@ fn main() -> Result<()> {
             run_review_flow(input, common, start)
         }
 
-        Commands::Commit { sha, common } => {
+        Some(Commands::Commit { sha, common }) => {
             let common = apply_default_ai(common, &config);
             let input = review_commit(&sha, &common)?;
 
             run_review_flow(input, common, start)
+        }
+
+        None => {
+            Cli::command().print_help()?;
+            println!();
+            Ok(())
         }
     }
 }

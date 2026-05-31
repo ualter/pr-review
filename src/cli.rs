@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use crate::config::user_config;
@@ -7,9 +7,13 @@ use crate::scm::ScmKind;
 #[derive(Parser)]
 #[command(name = "pr-review")]
 #[command(about = "AI-assisted PR/commit review CLI")]
+#[command(disable_version_flag = true)]
 pub struct Cli {
+    #[arg(long = "version", short = 'V', visible_short_alias = 'v', action = ArgAction::SetTrue)]
+    pub version: bool,
+
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Args, Clone)]

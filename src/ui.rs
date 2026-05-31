@@ -36,6 +36,8 @@ pub const BG_BLACK: &str = "\x1b[48;5;0m";
 pub const LINE: &str =
     "----------------------------------------------------------------------------------------------------------------";
 
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub fn print_header(repository: &str, source: &str, target: &str, review_branch: &str) {
     println!("{LINE}");
     println!("{}Repository: {}{}", GREEN_BOLD, repository, RESET);
@@ -268,7 +270,23 @@ pub fn print_startup_banner() {
     }
 
     println!("  {BLACK_BOLD} AI-Assisted Engineering Review CLI{RESET}");
-    // println!("{LINE}");
+    print_version_reveal();
+}
+
+fn print_version_reveal() {
+    let prefix = format!("   {BLUE_BOLD}📌 Version {RESET}");
+    let version = format!("v{APP_VERSION}");
+
+    println!();
+
+    for i in 1..=version.chars().count() {
+        let partial: String = version.chars().take(i).collect();
+        print!("\r{prefix}{GREEN_BOLD}{partial}{RESET}");
+        let _ = std::io::stdout().flush();
+        std::thread::sleep(std::time::Duration::from_millis(80));
+    }
+
+    println!();
 }
 
 pub fn print_sessions(sessions: &[std::path::PathBuf]) {
