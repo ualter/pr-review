@@ -57,10 +57,11 @@ impl ScmProvider for CodeCommitProvider {
         common: &CommonArgs,
         context: &PrContext,
     ) -> Result<String> {
+        let source_refspec = remote_tracking_refspec(&common.remote, &context.source_branch);
         run_command(
             &common.repo_path,
             "git",
-            &["fetch", &common.remote, &context.source_branch],
+            &["fetch", &common.remote, &source_refspec],
         )
         .with_context(|| {
             format!(
@@ -79,10 +80,11 @@ impl ScmProvider for CodeCommitProvider {
             )
         })?;
 
+        let target_refspec = remote_tracking_refspec(&common.remote, &context.target_branch);
         run_command(
             &common.repo_path,
             "git",
-            &["fetch", &common.remote, &context.target_branch],
+            &["fetch", &common.remote, &target_refspec],
         )
         .with_context(|| {
             format!(
@@ -106,8 +108,13 @@ impl ScmProvider for CodeCommitProvider {
             "git",
             &[
                 "diff",
-                &format!("{}/{}", common.remote, context.target_branch),
-                &format!("{}/{}", common.remote, context.source_branch),
+                &format!(
+                    "{}/{}...{}/{}",
+                    common.remote,
+                    context.target_branch,
+                    common.remote,
+                    context.source_branch
+                ),
                 "--",
             ],
         )
@@ -158,4 +165,12 @@ fn clean_branch_name(reference: &str) -> String {
         .strip_prefix("refs/heads/")
         .unwrap_or(reference)
         .to_string()
+}
+
+fn remote_tracking_refspec(remote: &str, branch: &str) -> String {
+    format!(
+        "refs/heads/{branch}:refs/remotes/{remote}/{branch}",
+        branch = branch,
+        remote = remote
+    )
 }

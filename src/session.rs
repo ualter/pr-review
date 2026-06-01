@@ -564,6 +564,11 @@ fn read_or_default(path: &Path, default: &str) -> Result<String> {
 }
 
 fn write_diff_by_file(diff_by_file_dir: &Path, diff: &str) -> Result<()> {
+    if diff_by_file_dir.exists() {
+        fs::remove_dir_all(diff_by_file_dir)
+            .with_context(|| format!("Failed to clear {}", diff_by_file_dir.display()))?;
+    }
+
     fs::create_dir_all(diff_by_file_dir)
         .with_context(|| format!("Failed to create {}", diff_by_file_dir.display()))?;
 
