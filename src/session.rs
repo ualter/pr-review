@@ -9,7 +9,7 @@ use std::{
 use crate::ai_backend::{AiEvent, backend_for_tool};
 use crate::{
     artifacts::{AiRunResult, load_review_meta},
-    cli::{AiTool, ReviewInput},
+    cli::{AiRuntime, ReviewInput},
     markdown_viewer::{
         open_markdown_text, open_markdown_viewer, open_markdown_viewer_at_end,
         print_markdown_document, print_markdown_text,
@@ -72,7 +72,7 @@ pub fn prepare_session_artifacts(
     artifact_dir: &Path,
     input: &ReviewInput,
     review: &str,
-    tool: &AiTool,
+    tool: &AiRuntime,
 ) -> Result<()> {
     let session = ReviewSession::new(artifact_dir)?;
 
@@ -91,14 +91,14 @@ pub fn prepare_session_artifacts(
 pub fn run_interactive_session(
     input: &ReviewInput,
     artifact_dir: &Path,
-    tool: &AiTool,
+    tool: &AiRuntime,
 ) -> Result<()> {
     let session = ReviewSession::new(artifact_dir)?;
     let mut conversation_summary_dirty = false;
 
     println!(
         "{GREEN_BOLD}Interactive review session started with {}{RESET}",
-        tool.display_name()
+        tool
     );
 
     println!("{BLACK_BOLD}Commands:{RESET}");
@@ -198,10 +198,7 @@ pub fn run_interactive_session(
                 if conversation_summary_dirty {
                     let spinner = start_spinner(
                         tool.status_icon(),
-                        format!(
-                            "{} is updating the conversation summary...",
-                            tool.display_name()
-                        ),
+                        format!("{tool} is updating the conversation summary..."),
                     );
                     update_conversation_summary(&session, tool)?;
                     spinner.stop();
@@ -234,7 +231,7 @@ pub fn run_interactive_session(
 
 fn process_user_question(
     input: &ReviewInput,
-    tool: &AiTool,
+    tool: &AiRuntime,
     session: &ReviewSession,
     user_question: &str,
 ) -> Result<(), anyhow::Error> {
@@ -248,7 +245,7 @@ fn process_user_question(
     let context = select_context_for_question(session, input, actual_question, force_full_diff)?;
     let prompt = build_chat_prompt(input, actual_question, &context);
     let backend = backend_for_tool(tool);
-    let spinner_label = format!("{} is thinking...", tool.display_name());
+    let spinner_label = format!("{tool} is thinking...");
     let mut spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
     let mut streamed_anything = false;
     let answer = backend.run_review(&prompt, &mut |event| match event {
@@ -375,7 +372,7 @@ User question:
     )
 }
 
-fn summarize_review(input: &ReviewInput, review: &str, tool: &AiTool) -> Result<String> {
+fn summarize_review(input: &ReviewInput, review: &str, tool: &AiRuntime) -> Result<String> {
     let prompt = format!(
         r#"
 Summarize this AI code review into compact memory for future follow-up questions.
@@ -401,7 +398,7 @@ Full review:
     Ok(run_ai_tool_silently(tool, &prompt)?.output)
 }
 
-fn update_conversation_summary(session: &ReviewSession, tool: &AiTool) -> Result<()> {
+fn update_conversation_summary(session: &ReviewSession, tool: &AiRuntime) -> Result<()> {
     let conversation = read_or_default(&session.conversation_path, "")?;
 
     let prompt = format!(
@@ -444,7 +441,7 @@ fn append_message(path: &Path, role: &str, message: &str) -> Result<()> {
     Ok(())
 }
 
-fn run_ai_tool_silently(tool: &AiTool, prompt: &str) -> Result<AiRunResult> {
+fn run_ai_tool_silently(tool: &AiRuntime, prompt: &str) -> Result<AiRunResult> {
     let backend = backend_for_tool(tool);
     let output = backend.run_review(prompt, &mut |_| {})?;
     Ok(AiRunResult { output })
@@ -801,7 +798,7 @@ fn extract_keywords(question_lower: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn resume_interactive_session(artifact_dir: &Path, tool: &AiTool) -> Result<()> {
+pub fn resume_interactive_session(artifact_dir: &Path, tool: &AiRuntime) -> Result<()> {
     let conversation_path = artifact_dir.join("conversation.md");
     let review_summary_path = artifact_dir.join("review-summary.md");
     let conversation_summary_path = artifact_dir.join("conversation-summary.md");

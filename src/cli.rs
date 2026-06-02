@@ -1,6 +1,7 @@
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use anyhow::{anyhow, Result};
-use std::path::PathBuf;
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use std::{fmt, path::PathBuf};
+
 use crate::config::user_config;
 use crate::scm::ScmKind;
 
@@ -20,6 +21,9 @@ pub struct Cli {
 pub struct SessionArgs {
     #[arg(long)]
     pub ai: AiTool,
+
+    #[arg(long, value_name = "MODEL")]
+    pub model: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -73,6 +77,10 @@ pub enum Commands {
         /// AI tool used for the interactive session
         #[arg(long, value_name = "TOOL")]
         ai: Option<AiTool>,
+
+        /// Override the model for the selected AI tool
+        #[arg(long, value_name = "MODEL")]
+        model: Option<String>,
     },
 }
 
@@ -124,6 +132,10 @@ pub enum SessionCommand {
         /// AI tool used for the interactive session
         #[arg(long, value_name = "TOOL")]
         ai: Option<AiTool>,
+
+        /// Override the model for the selected AI tool
+        #[arg(long, value_name = "MODEL")]
+        model: Option<String>,
     },
 }
 
@@ -153,12 +165,16 @@ pub struct CommonArgs {
     #[arg(long, value_name = "TOOL")]
     pub ai: Option<AiTool>,
 
+    /// Override the model for the selected AI tool
+    #[arg(long, value_name = "MODEL")]
+    pub model: Option<String>,
+
     /// Return to the shell after the review instead of entering interactive chat
     #[arg(long)]
     pub no_interactive: bool,
 }
 
-#[derive(Clone, ValueEnum, Debug)]
+#[derive(Clone, Copy, ValueEnum, Debug)]
 pub enum AiTool {
     /// GitHub Copilot CLI (`copilot -p`)
     Copilot,
@@ -229,6 +245,66 @@ impl AiTool {
                 expected_ai_tool_values()
             )),
         }
+    }
+
+    pub fn default_model(&self) -> &'static str {
+        match self {
+            AiTool::Copilot => "gpt-5",
+            #[cfg(feature = "copilot-sdk")]
+            AiTool::CopilotSdk => "gpt-5",
+            AiTool::Codex => "gpt-5-codex",
+        }
+    }
+
+    pub fn configured_model(&self) -> Option<String> {
+        let config = user_config();
+        match self {
+            AiTool::Copilot => config.copilot_model.clone(),
+            #[cfg(feature = "copilot-sdk")]
+            AiTool::CopilotSdk => config.copilot_sdk_model.clone(),
+            AiTool::Codex => config.codex_model.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AiRuntime {
+    pub tool: AiTool,
+    pub model: String,
+}
+
+impl AiRuntime {
+    pub fn resolve(tool: AiTool, cli_model: Option<&str>) -> Self {
+        let model = cli_model
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .or_else(|| tool.configured_model())
+            .unwrap_or_else(|| tool.default_model().to_string());
+
+        Self { tool, model }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        self.tool.display_name()
+    }
+
+    pub fn status_icon(&self) -> &str {
+        self.tool.status_icon()
+    }
+
+    pub fn shows_live_status_updates(&self) -> bool {
+        self.tool.shows_live_status_updates()
+    }
+
+    pub fn manual_hint(&self, prompt_path: &std::path::Path) -> String {
+        self.tool.manual_hint(prompt_path)
+    }
+}
+
+impl fmt::Display for AiRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} 🧠 {}", self.display_name(), self.model)
     }
 }
 

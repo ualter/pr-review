@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::{
     artifacts::{ai_run_debug_mode, run_ai_tool_streaming},
-    cli::AiTool,
+    cli::{AiRuntime, AiTool},
     debug::DEBUG,
 };
 
@@ -19,22 +19,22 @@ pub trait AiBackend {
     fn run_review(&self, prompt: &str, emit: &mut dyn FnMut(AiEvent)) -> Result<String>;
 }
 
-pub fn backend_for_tool(tool: &AiTool) -> Box<dyn AiBackend + '_> {
-    match tool {
-        AiTool::Copilot => Box::new(CliAiBackend::new(tool)),
+pub fn backend_for_tool(runtime: &AiRuntime) -> Box<dyn AiBackend + '_> {
+    match runtime.tool {
+        AiTool::Copilot => Box::new(CliAiBackend::new(runtime)),
         #[cfg(feature = "copilot-sdk")]
-        AiTool::CopilotSdk => Box::new(CopilotSdkBackend::new()),
-        AiTool::Codex => Box::new(CliAiBackend::new(tool)),
+        AiTool::CopilotSdk => Box::new(CopilotSdkBackend::new(runtime.model.clone())),
+        AiTool::Codex => Box::new(CliAiBackend::new(runtime)),
     }
 }
 
 pub struct CliAiBackend<'a> {
-    tool: &'a AiTool,
+    runtime: &'a AiRuntime,
 }
 
 impl<'a> CliAiBackend<'a> {
-    pub fn new(tool: &'a AiTool) -> Self {
-        Self { tool }
+    pub fn new(runtime: &'a AiRuntime) -> Self {
+        Self { runtime }
     }
 }
 
@@ -43,19 +43,20 @@ impl AiBackend for CliAiBackend<'_> {
         emit(AiEvent::Started);
         emit(AiEvent::Status(format!(
             "{} is starting...",
-            self.tool.display_name()
+            self.runtime.display_name()
         )));
 
         if DEBUG {
-            emit(AiEvent::Status(format!("AI: {}", self.tool.display_name())));
+            emit(AiEvent::Status(format!("AI: {}", self.runtime.display_name())));
+            emit(AiEvent::Status(format!("Model: {}", self.runtime.model)));
             emit(AiEvent::Status(format!("Prompt bytes: {}", prompt.len())));
             emit(AiEvent::Status(format!(
                 "Execution mode: {}",
-                ai_run_debug_mode(self.tool, prompt)
+                ai_run_debug_mode(self.runtime, prompt)
             )));
         }
 
-        match run_ai_tool_streaming(self.tool, prompt, |chunk| {
+        match run_ai_tool_streaming(self.runtime, prompt, |chunk| {
             emit(AiEvent::TextDelta(chunk.to_string()));
         }) {
             Ok(run_result) => {
@@ -71,12 +72,14 @@ impl AiBackend for CliAiBackend<'_> {
 }
 
 #[cfg(feature = "copilot-sdk")]
-pub struct CopilotSdkBackend;
+pub struct CopilotSdkBackend {
+    model: String,
+}
 
 #[cfg(feature = "copilot-sdk")]
 impl CopilotSdkBackend {
-    pub fn new() -> Self {
-        Self
+    pub fn new(model: String) -> Self {
+        Self { model }
     }
 }
 
@@ -111,6 +114,7 @@ impl AiBackend for CopilotSdkBackend {
 
         if DEBUG {
             emit(AiEvent::Status("AI: Copilot SDK".to_string()));
+            emit(AiEvent::Status(format!("Model: {}", self.model)));
             emit(AiEvent::Status(format!("Prompt bytes: {}", prompt.len())));
             emit(AiEvent::Status(
                 "Execution mode: copilot sdk streaming via session API".to_string(),
@@ -148,6 +152,7 @@ impl AiBackend for CopilotSdkBackend {
                 config.request_auto_mode_switch = Some(false);
                 config.request_elicitation = Some(false);
                 config.include_sub_agent_streaming_events = Some(false);
+                config.model = Some(self.model.clone());
                 if let Ok(cwd) = env::current_dir() {
                     config.working_directory = Some(cwd);
                 }

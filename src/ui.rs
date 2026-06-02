@@ -3,7 +3,7 @@ use dialoguer::{
     theme::ColorfulTheme,
 };
 
-use crate::cli::AiTool;
+use crate::cli::{AiRuntime, AiTool};
 use crate::config::{PromptStyle, user_config};
 use anyhow::Result;
 use std::{
@@ -90,7 +90,7 @@ pub fn print_artifacts(
     artifact_dir: &Path,
     archived_diff_path: &Path,
     archived_prompt_path: &Path,
-    ai: &Option<AiTool>,
+    ai: &Option<AiRuntime>,
 ) {
     println!(
         "{}Diff written to:   {}{}",
@@ -136,10 +136,11 @@ pub fn print_artifacts(
     if ai.is_none() {
         println!("{BLACK_BOLD}Run manually with one of:{RESET}");
         for tool in &[AiTool::Copilot, AiTool::Codex] {
+            let runtime = AiRuntime::resolve(*tool, None);
             println!(
                 "  {BLACK_BOLD}[{}]  {}{RESET}",
-                tool.display_name(),
-                tool.manual_hint(prompt_path)
+                runtime,
+                runtime.manual_hint(prompt_path)
             );
         }
         println!("{BLUE_BOLD}{LINE}{RESET}");
@@ -160,11 +161,16 @@ fn format_approx_bytes(bytes: u64) -> String {
     }
 }
 
-pub fn print_report(report_path: &Path, archived_path: &Path, elapsed: Duration, tool: &AiTool) {
+pub fn print_report(
+    report_path: &Path,
+    archived_path: &Path,
+    elapsed: Duration,
+    runtime: &AiRuntime,
+) {
     println!(
         "{}{} review completed in {:.1}s{}",
         GREEN_BOLD,
-        tool.display_name(),
+        runtime,
         elapsed.as_secs_f64(),
         RESET
     );
@@ -269,20 +275,26 @@ fn format_elapsed(elapsed: Duration) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
-pub fn render_interactive_prompt(tool: &AiTool) -> String {
-    let tool_name = tool.display_name().to_lowercase();
+pub fn render_interactive_prompt(runtime: &AiRuntime) -> String {
+    let tool_name = runtime.display_name().to_lowercase();
+    let model = runtime.model.as_str();
 
     match user_config().prompt_style {
-        PromptStyle::Simple => format!("{BLUE_BOLD}{} pr-review>{RESET} ", tool.status_icon(),),
+        PromptStyle::Simple => format!(
+            "{BLUE_BOLD}{} pr-review 🧠 {}>{RESET} ",
+            runtime.status_icon(),
+            model,
+        ),
         PromptStyle::Fancy => format!(
-            "{FG_DARK_BG}░▒▓{BG_DARK}{FG_WHITE_BOLD}{} {} {BG_GREEN}{FG_DARK_BG}{FG_WHITE_BOLD} pr-review {BG_BLACK}{FG_GREEN_BG}{RESET} ",
-            tool.status_icon(),
+            "{FG_DARK_BG}░▒▓{BG_DARK}{FG_WHITE_BOLD}{} {} {BG_GREEN}{FG_DARK_BG}{FG_WHITE_BOLD} pr-review {FG_WHITE_BOLD}🧠 {} {BG_BLACK}{FG_GREEN_BG}{RESET} ",
+            runtime.status_icon(),
             tool_name,
+            model,
         ),
     }
 }
 
-pub fn print_interactive_help(tool: &AiTool) {
+pub fn print_interactive_help(tool: &AiRuntime) {
     let help_rows = [
         ("❓ /help", "Show available commands and shortcuts"),
         ("📋 /summary", "Show the AI-generated conversation summary"),
@@ -325,7 +337,7 @@ pub fn print_interactive_help(tool: &AiTool) {
 
     println!(
         "{BLACK_BOLD}Anything else will be sent directly to the AI assistant {BLACK_BOLD}({}).{RESET}",
-        tool.display_name()
+        tool
     );
     println!("{LINE}");
 }

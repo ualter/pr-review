@@ -17,6 +17,9 @@ pub struct AppConfig {
     pub copilot_icon: Option<String>,
     pub codex_icon: Option<String>,
     pub prompt_style: PromptStyle,
+    pub copilot_model: Option<String>,
+    pub copilot_sdk_model: Option<String>,
+    pub codex_model: Option<String>,
     pub bitbucket_url: Option<String>,
     pub bitbucket_project: Option<String>,
     pub bitbucket_repo: Option<String>,
@@ -42,6 +45,9 @@ pub fn load_user_config() -> Result<AppConfig> {
     let mut config = AppConfig::default();
     let mut in_ai_section = false;
     let mut in_scm_section = false;
+    let mut in_copilot_section = false;
+    let mut in_copilot_sdk_section = false;
+    let mut in_codex_section = false;
     let mut in_bitbucket_section = false;
 
     for line in raw.lines() {
@@ -55,6 +61,9 @@ pub fn load_user_config() -> Result<AppConfig> {
             let section = line.trim_start_matches('[').trim_end_matches(']').trim();
             in_ai_section = section == "ai";
             in_scm_section = section == "scm";
+            in_copilot_section = section == "copilot";
+            in_copilot_sdk_section = section == "copilot_sdk";
+            in_codex_section = section == "codex";
             in_bitbucket_section = section == "bitbucket";
             continue;
         }
@@ -91,6 +100,15 @@ pub fn load_user_config() -> Result<AppConfig> {
             }
             "prompt_style" if in_ai_section => {
                 config.prompt_style = PromptStyle::from_config_value(value)?;
+            }
+            "model" if in_copilot_section => {
+                config.copilot_model = Some(value.to_string());
+            }
+            "model" if in_copilot_sdk_section => {
+                config.copilot_sdk_model = Some(value.to_string());
+            }
+            "model" if in_codex_section => {
+                config.codex_model = Some(value.to_string());
             }
             "url" if in_bitbucket_section => {
                 config.bitbucket_url = Some(value.to_string());
@@ -159,12 +177,21 @@ fn default_config_template() -> &'static str {
     r#"# pr-review user configuration
 
 [ai]
-# valid values: "copilot" or "codex"
+# valid values: "copilot", "codex", or "copilot-sdk" if built with that feature
 default_ai = "codex"
 # valid values: "fancy" or "simple"
 prompt_style = "fancy"
 copilot_icon = "🧑‍✈️"
 codex_icon = "🤖"
+
+[copilot]
+model = "gpt-5"
+
+[copilot_sdk]
+model = "gpt-5"
+
+[codex]
+model = "gpt-5-codex"
 
 [scm]
 # valid values: "codecommit" or "bitbucket"
@@ -196,7 +223,7 @@ fn merge_missing_config_entries(raw: &str) -> String {
         &mut lines,
         "ai",
         &[
-            "# valid values: \"copilot\" or \"codex\"",
+            "# valid values: \"copilot\", \"codex\", or \"copilot-sdk\" if built with that feature",
             "default_ai = \"codex\"",
             "# valid values: \"fancy\" or \"simple\"",
             "prompt_style = \"fancy\"",
@@ -204,6 +231,9 @@ fn merge_missing_config_entries(raw: &str) -> String {
             "codex_icon = \"🤖\"",
         ],
     );
+    ensure_section(&mut lines, "copilot", &["model = \"gpt-5\""]);
+    ensure_section(&mut lines, "copilot_sdk", &["model = \"gpt-5\""]);
+    ensure_section(&mut lines, "codex", &["model = \"gpt-5-codex\""]);
     ensure_section(
         &mut lines,
         "scm",

@@ -22,7 +22,7 @@ use std::{
 };
 
 use artifacts::{existing_review_artifact_dir, review_artifact_dir, write_review_meta};
-use cli::{Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
+use cli::{AiRuntime, Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
 use config::{ConfigInitStatus, init_user_config, load_user_config, set_user_config};
 use prompt_profile::{PromptInitStatus, init_user_prompt_profiles, resolve_prompt_profile};
 use review::{build_prompt, review_commit, review_pr};
@@ -186,6 +186,7 @@ fn main() -> Result<()> {
             command,
             review_name,
             ai,
+            model,
         }) => match command {
             Some(SessionCommand::List) => {
                 ui::print_header();
@@ -196,7 +197,11 @@ fn main() -> Result<()> {
                 Ok(())
             }
 
-            Some(SessionCommand::Resume { review_name, ai }) => {
+            Some(SessionCommand::Resume {
+                review_name,
+                ai,
+                model,
+            }) => {
                 ui::print_header();
                 let review_name = match review_name {
                     Some(name) => name,
@@ -211,14 +216,15 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
 
-                let ai = ai.or_else(|| config.default_ai.clone()).ok_or_else(|| {
+                let tool = ai.or(config.default_ai).ok_or_else(|| {
                     anyhow::anyhow!(
                         "No AI tool specified. Use `--ai <tool>` or set `default_ai = \"codex\"` in ~/.pr-review/config.toml."
                     )
                 })?;
+                let runtime = AiRuntime::resolve(tool, model.as_deref());
 
                 let artifact_dir = existing_review_artifact_dir(&review_name)?;
-                resume_interactive_session(&artifact_dir, &ai)?;
+                resume_interactive_session(&artifact_dir, &runtime)?;
                 Ok(())
             }
 
@@ -234,14 +240,15 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
 
-                let ai = ai.or_else(|| config.default_ai.clone()).ok_or_else(|| {
+                let tool = ai.or(config.default_ai).ok_or_else(|| {
                     anyhow::anyhow!(
                         "No AI tool specified. Use `--ai <tool>` or set `default_ai = \"codex\"` in ~/.pr-review/config.toml."
                     )
                 })?;
+                let runtime = AiRuntime::resolve(tool, model.as_deref());
 
                 let artifact_dir = existing_review_artifact_dir(&review_name)?;
-                resume_interactive_session(&artifact_dir, &ai)?;
+                resume_interactive_session(&artifact_dir, &runtime)?;
                 Ok(())
             }
         },
@@ -271,7 +278,7 @@ fn main() -> Result<()> {
 
 fn apply_default_ai(mut common: CommonArgs, config: &config::AppConfig) -> CommonArgs {
     if common.ai.is_none() {
-        common.ai = config.default_ai.clone();
+        common.ai = config.default_ai;
     }
 
     common
@@ -301,7 +308,11 @@ fn run_review_flow(
     let (archived_diff_path, archived_prompt_path) =
         store_review_artifacts(&input, &prompt, &diff_path, &prompt_path, &artifact_dir)?;
 
-    write_review_meta(&artifact_dir, &input, &common.repo_path, &common.ai)?;
+    let runtime = common
+        .ai
+        .map(|tool| AiRuntime::resolve(tool, common.model.as_deref()));
+
+    write_review_meta(&artifact_dir, &input, &common.repo_path, &runtime)?;
 
     print_artifacts(
         &diff_path,
@@ -309,13 +320,13 @@ fn run_review_flow(
         &artifact_dir,
         &archived_diff_path,
         &archived_prompt_path,
-        &common.ai,
+        &runtime,
     );
 
-    if let Some(tool) = &common.ai {
+    if let Some(runtime) = &runtime {
         print!(
             "\r{YELLOW}Sending prompt to {}...{RESET}",
-            tool.display_name()
+            runtime
         );
         io::stdout().flush()?;
 
@@ -328,9 +339,10 @@ fn run_review_flow(
             prompt_arg
         };
 
-        let backend = backend_for_tool(tool);
-        let spinner_label = format!("{} is reviewing:", tool.display_name());
-        let mut spinner_handler = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+        let backend = backend_for_tool(runtime);
+        let spinner_label = format!("{} is reviewing:", runtime);
+        let mut spinner_handler =
+            Some(start_spinner(runtime.status_icon(), spinner_label.clone()));
         let mut streamed_anything = false;
         let review = backend.run_review(&prompt_arg, &mut |event| match event {
             AiEvent::TextDelta(chunk) => {
@@ -352,9 +364,9 @@ fn run_review_flow(
                     println!("{YELLOW}[debug]{RESET} {message}");
                     if !streamed_anything {
                         spinner_handler =
-                            Some(start_spinner(tool.status_icon(), spinner_label.clone()));
+                            Some(start_spinner(runtime.status_icon(), spinner_label.clone()));
                     }
-                } else if tool.shows_live_status_updates()
+                } else if runtime.shows_live_status_updates()
                     && let Some(active_spinner) = spinner_handler.as_ref()
                 {
                     active_spinner.set_status(message);
@@ -367,7 +379,7 @@ fn run_review_flow(
                         println!();
                     }
                     println!("{YELLOW}[debug]{RESET} failure: {message}");
-                } else if tool.shows_live_status_updates()
+                } else if runtime.shows_live_status_updates()
                     && let Some(active_spinner) = spinner_handler.as_ref()
                 {
                     active_spinner.set_status(format!("failure: {message}"));
@@ -399,13 +411,13 @@ fn run_review_flow(
             &report_path,
             &archived_report_path,
             ai_start.elapsed(),
-            tool,
+            runtime,
         );
 
-        session::prepare_session_artifacts(&artifact_dir, &input, &review, tool)?;
+        session::prepare_session_artifacts(&artifact_dir, &input, &review, runtime)?;
 
         if !common.no_interactive {
-            session::run_interactive_session(&input, &artifact_dir, tool)?;
+            session::run_interactive_session(&input, &artifact_dir, runtime)?;
         }
     }
 

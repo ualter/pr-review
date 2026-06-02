@@ -11,15 +11,16 @@ use std::{
     thread,
 };
 
-use crate::cli::{AiTool, ReviewInput};
+use crate::cli::{AiRuntime, AiTool, ReviewInput};
 
-const REVIEW_META_SCHEMA_VERSION: u32 = 2;
+const REVIEW_META_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewMeta {
     pub schema_version: u32,
     pub timestamp: String,
     pub tool: String,
+    pub model: Option<String>,
     pub review_kind: String,
     pub repo_path: String,
     pub remote: String,
@@ -47,12 +48,17 @@ pub fn write_review_meta(
     artifact_dir: &Path,
     input: &ReviewInput,
     repo_path: &Path,
-    tool: &Option<AiTool>,
+    runtime: &Option<AiRuntime>,
 ) -> Result<()> {
     let meta = ReviewMeta {
         schema_version: REVIEW_META_SCHEMA_VERSION,
         timestamp: Local::now().to_rfc3339(),
-        tool: tool.as_ref().map(|t| t.display_name()).unwrap_or("none").to_string(),
+        tool: runtime
+            .as_ref()
+            .map(|runtime| runtime.display_name())
+            .unwrap_or("none")
+            .to_string(),
+        model: runtime.as_ref().map(|runtime| runtime.model.clone()),
         review_kind: input.review_kind.clone(),
         repo_path: repo_path.display().to_string(),
         remote: input.remote.clone(),
@@ -161,6 +167,10 @@ pub fn load_review_meta(artifact_dir: &Path) -> Result<LoadedReviewMeta> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("none")
                 .to_string(),
+            model: value
+                .get("model")
+                .and_then(|v| v.as_str())
+                .map(ToString::to_string),
             review_kind: inferred_kind.to_string(),
             repo_path: ".".to_string(),
             remote: "origin".to_string(),
@@ -179,8 +189,8 @@ pub fn load_review_meta(artifact_dir: &Path) -> Result<LoadedReviewMeta> {
 
 const MAX_COPILOT_PROMPT_BYTES: usize = 129_000;
 
-pub fn ai_run_debug_mode(tool: &AiTool, prompt: &str) -> &'static str {
-    match tool {
+pub fn ai_run_debug_mode(runtime: &AiRuntime, prompt: &str) -> &'static str {
+    match runtime.tool {
         AiTool::Copilot if prompt.len() > MAX_COPILOT_PROMPT_BYTES => {
             "copilot streaming via temp-file prompt shim"
         }
@@ -191,11 +201,15 @@ pub fn ai_run_debug_mode(tool: &AiTool, prompt: &str) -> &'static str {
     }
 }
 
-pub fn run_ai_tool_streaming<F>(tool: &AiTool, prompt: &str, on_chunk: F) -> Result<AiRunResult>
+pub fn run_ai_tool_streaming<F>(
+    runtime: &AiRuntime,
+    prompt: &str,
+    on_chunk: F,
+) -> Result<AiRunResult>
 where
     F: FnMut(&str),
 {
-    match tool {
+    match runtime.tool {
         AiTool::Copilot => {
             if prompt.len() > MAX_COPILOT_PROMPT_BYTES {
                 eprintln!(
@@ -216,7 +230,7 @@ where
                     output: run_command_streaming(
                         Path::new("."),
                         "copilot",
-                        &["-p", &small_prompt],
+                        &["--model", &runtime.model, "-p", &small_prompt],
                         on_chunk,
                     )?,
                 })
@@ -225,7 +239,7 @@ where
                     output: run_command_streaming(
                         Path::new("."),
                         "copilot",
-                        &["-p", prompt],
+                        &["--model", &runtime.model, "-p", prompt],
                         on_chunk,
                     )?,
                 })
@@ -239,7 +253,7 @@ where
             output: run_command_with_stdin_streaming(
                 Path::new("."),
                 "codex",
-                &["review", "-"],
+                &["-m", &runtime.model, "review", "-"],
                 prompt,
                 on_chunk,
             )?,
@@ -515,7 +529,7 @@ pub fn select_review_session() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::ReviewInput;
+    use crate::cli::{AiRuntime, ReviewInput};
 
     fn sample_review_input() -> ReviewInput {
         ReviewInput {
@@ -538,14 +552,16 @@ mod tests {
     fn writes_and_loads_current_review_meta() {
         let temp_dir = tempfile::tempdir().unwrap();
         let input = sample_review_input();
+        let runtime = AiRuntime::resolve(AiTool::Codex, Some("gpt-5-codex"));
 
-        write_review_meta(temp_dir.path(), &input, Path::new("/tmp/repo"), &Some(AiTool::Codex))
+        write_review_meta(temp_dir.path(), &input, Path::new("/tmp/repo"), &Some(runtime))
             .unwrap();
 
         let loaded = load_review_meta(temp_dir.path()).unwrap();
 
         assert!(loaded.warning.is_none());
-        assert_eq!(loaded.meta.schema_version, 2);
+        assert_eq!(loaded.meta.schema_version, 3);
+        assert_eq!(loaded.meta.model.as_deref(), Some("gpt-5-codex"));
         assert_eq!(loaded.meta.review_kind, "pr");
         assert_eq!(loaded.meta.repo_path, "/tmp/repo");
         assert_eq!(loaded.meta.remote, "origin");
