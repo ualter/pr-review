@@ -17,6 +17,7 @@ use crate::{
     ui::{
         BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW, YELLOW_BOLD,
         print_interactive_help, render_interactive_prompt, start_spinner,
+        StreamingMarkdownFormatter,
     },
 };
 
@@ -248,6 +249,7 @@ fn process_user_question(
     let spinner_label = format!("{tool} is thinking...");
     let mut spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
     let mut streamed_anything = false;
+    let mut formatter = StreamingMarkdownFormatter::new();
     let answer = backend.run_review(&prompt, &mut |event| match event {
         AiEvent::TextDelta(chunk) => {
             if let Some(active_spinner) = spinner.take() {
@@ -256,8 +258,7 @@ fn process_user_question(
             }
 
             streamed_anything = true;
-            print!("{chunk}");
-            let _ = io::stdout().flush();
+            let _ = formatter.push_chunk(&chunk);
         }
         AiEvent::Status(message) => {
             if crate::debug::DEBUG {
@@ -294,6 +295,7 @@ fn process_user_question(
     if let Some(active_spinner) = spinner.take() {
         active_spinner.stop();
     } else if streamed_anything {
+        let _ = formatter.finish();
         println!();
     }
 

@@ -30,7 +30,7 @@ use scm::ScmKind;
 use session::resume_interactive_session;
 use ui::{
     GREEN, GREEN_BOLD, RESET, YELLOW, print_artifacts, print_report, print_review_flow_header,
-    restore_cursor, start_spinner,
+    restore_cursor, start_spinner, StreamingMarkdownFormatter,
 };
 
 use crate::{
@@ -344,6 +344,7 @@ fn run_review_flow(
         let mut spinner_handler =
             Some(start_spinner(runtime.status_icon(), spinner_label.clone()));
         let mut streamed_anything = false;
+        let mut formatter = StreamingMarkdownFormatter::new();
         let review = backend.run_review(&prompt_arg, &mut |event| match event {
             AiEvent::TextDelta(chunk) => {
                 if let Some(active_spinner) = spinner_handler.take() {
@@ -352,8 +353,7 @@ fn run_review_flow(
                 }
 
                 streamed_anything = true;
-                print!("{chunk}");
-                let _ = io::stdout().flush();
+                let _ = formatter.push_chunk(&chunk);
             }
             AiEvent::Status(message) => {
                 if crate::debug::DEBUG {
@@ -391,6 +391,7 @@ fn run_review_flow(
         if let Some(active_spinner) = spinner_handler.take() {
             active_spinner.stop();
         } else if streamed_anything {
+            let _ = formatter.finish();
             println!();
         }
 

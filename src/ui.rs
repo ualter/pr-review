@@ -1,5 +1,5 @@
 use dialoguer::{
-    console::{Style, Term},
+    console::{Style, Term, measure_text_width},
     theme::ColorfulTheme,
 };
 
@@ -36,6 +36,147 @@ pub const BG_BLACK: &str = "\x1b[48;5;0m";
 pub const LINE: &str = "----------------------------------------------------------------------------------------------------------------";
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub struct StreamingMarkdownFormatter {
+    pending: String,
+    in_code_block: bool,
+}
+
+impl StreamingMarkdownFormatter {
+    pub fn new() -> Self {
+        Self {
+            pending: String::new(),
+            in_code_block: false,
+        }
+    }
+
+    pub fn push_chunk(&mut self, chunk: &str) -> io::Result<()> {
+        self.pending.push_str(chunk);
+
+        while let Some(idx) = self.pending.find('\n') {
+            let line_with_newline: String = self.pending.drain(..=idx).collect();
+            let line = line_with_newline.trim_end_matches('\n');
+            print!("{}", self.format_line(line));
+            println!();
+        }
+
+        io::stdout().flush()
+    }
+
+    pub fn finish(&mut self) -> io::Result<()> {
+        if !self.pending.is_empty() {
+            let line = std::mem::take(&mut self.pending);
+            print!("{}", self.format_line(&line));
+        }
+        io::stdout().flush()
+    }
+
+    fn format_line(&mut self, line: &str) -> String {
+        let trimmed = line.trim_start();
+
+        if trimmed.starts_with("```") {
+            self.in_code_block = !self.in_code_block;
+            return format!("{BLACK_BOLD}⌁ {trimmed}{RESET}");
+        }
+
+        if self.in_code_block {
+            return format!("{GREEN}{line}{RESET}");
+        }
+
+        if let Some(content) = trimmed.strip_prefix("### ") {
+            return format!("{BLUE_BOLD}▪ {content}{RESET}");
+        }
+
+        if let Some(content) = trimmed.strip_prefix("## ") {
+            return format!("{BLUE_BOLD}▸ {content}{RESET}");
+        }
+
+        if let Some(content) = trimmed.strip_prefix("# ") {
+            return format!("{BLUE_BOLD}📌 {content}{RESET}");
+        }
+
+        if let Some(content) = trimmed.strip_prefix("> ") {
+            return format!("{BLACK_BOLD}💬 {content}{RESET}");
+        }
+
+        if trimmed == "---" || trimmed == "***" {
+            return format!("{BLUE_BOLD}{LINE}{RESET}");
+        }
+
+        if let Some(content) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
+            return format!("{YELLOW_BOLD}•{RESET} {}", format_inline_markdown(content));
+        }
+
+        if let Some((prefix, rest)) = split_numbered_prefix(trimmed) {
+            return format!("{YELLOW_BOLD}{prefix}{RESET} {}", format_inline_markdown(rest));
+        }
+
+        format_inline_markdown(line)
+    }
+}
+
+fn split_numbered_prefix(line: &str) -> Option<(&str, &str)> {
+    let mut digit_end = 0usize;
+    for (idx, ch) in line.char_indices() {
+        if ch.is_ascii_digit() {
+            digit_end = idx + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    if digit_end == 0 {
+        return None;
+    }
+
+    let suffix = &line[digit_end..];
+    if let Some(rest) = suffix.strip_prefix(". ") {
+        Some((&line[..digit_end + 1], rest))
+    } else {
+        None
+    }
+}
+
+fn format_inline_markdown(line: &str) -> String {
+    let mut out = String::new();
+    let mut chars = line.chars().peekable();
+    let mut in_code = false;
+    let mut in_bold = false;
+
+    while let Some(ch) = chars.next() {
+        if ch == '`' {
+            if in_code {
+                out.push_str(RESET);
+            } else {
+                out.push_str(BLACK_BOLD);
+            }
+            in_code = !in_code;
+            continue;
+        }
+
+        if ch == '*' && chars.peek() == Some(&'*') {
+            let _ = chars.next();
+            if in_bold {
+                out.push_str(RESET);
+            } else {
+                out.push_str(BLUE_BOLD);
+            }
+            in_bold = !in_bold;
+            continue;
+        }
+
+        out.push(ch);
+    }
+
+    if in_code || in_bold {
+        out.push_str(RESET);
+    }
+
+    out
+}
 
 pub fn restore_cursor() {
     print!("\x1b[?25h");
@@ -226,17 +367,8 @@ pub fn start_spinner(icon: &str, message: impl Into<String>) -> SpinnerHandle {
                 time_icon[i % time_icon.len()],
                 format_elapsed(started_at.elapsed())
             );
-            let visible_line = format!(
-                "{} {} {}{} {}",
-                chars[i % chars.len()],
-                icon,
-                message,
-                suffix,
-                elapsed
-            );
-            let padding = " ".repeat(last_visible_len.saturating_sub(visible_line.chars().count()));
-            print!(
-                "\r{}{}{} {} {}{}{}{} {}{}{}",
+            let rendered_line = format!(
+                "{}{}{} {} {}{}{}{} {}{}{}",
                 YELLOW_BOLD,
                 chars[i % chars.len()],
                 RESET,
@@ -247,11 +379,22 @@ pub fn start_spinner(icon: &str, message: impl Into<String>) -> SpinnerHandle {
                 BLUE_BOLD,
                 elapsed,
                 RESET,
-                padding,
+                "",
             );
+            let visible_line = format!(
+                "{} {} {}{} {}",
+                chars[i % chars.len()],
+                icon,
+                message,
+                suffix,
+                elapsed
+            );
+            let visible_width = measure_text_width(&rendered_line);
+            let padding = " ".repeat(last_visible_len.saturating_sub(visible_width));
+            print!("\r{rendered_line}{padding}");
             let _ = io::stdout().flush();
 
-            last_visible_len = visible_line.chars().count();
+            last_visible_len = visible_width.max(measure_text_width(&visible_line));
             i += 1;
             thread::sleep(Duration::from_millis(100));
         }
