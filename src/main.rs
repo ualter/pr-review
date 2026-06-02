@@ -5,6 +5,7 @@ mod config;
 mod debug;
 mod doctor;
 mod markdown_viewer;
+mod prompt_budget;
 mod prompt_profile;
 mod review;
 mod scm;
@@ -25,6 +26,9 @@ use artifacts::{existing_review_artifact_dir, review_artifact_dir, write_review_
 use cli::{AiRuntime, Cli, Commands, CommonArgs, ConfigCommand, PromptCommand, ReviewInput};
 use config::{ConfigInitStatus, init_user_config, load_user_config, set_user_config};
 use prompt_profile::{PromptInitStatus, init_user_prompt_profiles, resolve_prompt_profile};
+use prompt_budget::{
+    PromptBudgetDecision, analyze_prompt_budget, confirm_prompt_budget, print_prompt_budget,
+};
 use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
 use session::resume_interactive_session;
@@ -292,6 +296,7 @@ fn run_review_flow(
 ) -> Result<()> {
     let prompt_profile = resolve_prompt_profile(scm_kind, &input.repository, &common.repo_path)?;
     let prompt = build_prompt(&input, &prompt_profile);
+    let prompt_budget = analyze_prompt_budget(&input, &prompt);
     let tmp_dir = std::env::temp_dir();
     let diff_path = tmp_dir.join(format!("{}-diff.patch", input.artifact_prefix));
     let prompt_path = tmp_dir.join(format!("{}-prompt.txt", input.artifact_prefix));
@@ -304,6 +309,12 @@ fn run_review_flow(
         &input.target,
         &input.review_ref,
     );
+    print_prompt_budget(&prompt_budget);
+
+    if let PromptBudgetDecision::Cancelled = confirm_prompt_budget(&prompt_budget)? {
+        println!("{YELLOW}Review cancelled before the AI call.{RESET}");
+        return Ok(());
+    }
 
     let (archived_diff_path, archived_prompt_path) =
         store_review_artifacts(&input, &prompt, &diff_path, &prompt_path, &artifact_dir)?;

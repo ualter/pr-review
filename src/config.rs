@@ -77,6 +77,9 @@ pub fn load_user_config() -> Result<AppConfig> {
 
         if !in_ai_section
             && !in_scm_section
+            && !in_copilot_section
+            && !in_copilot_sdk_section
+            && !in_codex_section
             && !in_bitbucket_section
             && key != "default_ai"
             && key != "default_tool"
@@ -185,10 +188,10 @@ copilot_icon = "🧑‍✈️"
 codex_icon = "🤖"
 
 [copilot]
-model = "gpt-5"
+model = "gpt-5.4"
 
 [copilot_sdk]
-model = "gpt-5"
+model = "gpt-5.4"
 
 [codex]
 model = "gpt-5-codex"
@@ -231,8 +234,8 @@ fn merge_missing_config_entries(raw: &str) -> String {
             "codex_icon = \"🤖\"",
         ],
     );
-    ensure_section(&mut lines, "copilot", &["model = \"gpt-5\""]);
-    ensure_section(&mut lines, "copilot_sdk", &["model = \"gpt-5\""]);
+    ensure_section(&mut lines, "copilot", &["model = \"gpt-5.4\""]);
+    ensure_section(&mut lines, "copilot_sdk", &["model = \"gpt-5.4\""]);
     ensure_section(&mut lines, "codex", &["model = \"gpt-5-codex\""]);
     ensure_section(
         &mut lines,

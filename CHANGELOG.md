@@ -1,3 +1,12 @@
+## v0.1.3
+
+  - add prompt budget reporting before AI review execution
+  - show the largest diff contributors, prompt size, and estimated token usage
+  - require confirmation before continuing with high-cost prompts
+  - improve the prompt budget panel styling and alignment in the terminal UI
+  - fix AI model config loading so Copilot, Copilot SDK, and Codex honor configured models correctly
+  - default Copilot and Copilot SDK to `gpt-5.4`
+
 ## v0.1.2
 
   - add configurable model selection for Copilot, Copilot SDK, and Codex via config and `--model`

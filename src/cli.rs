@@ -249,9 +249,9 @@ impl AiTool {
 
     pub fn default_model(&self) -> &'static str {
         match self {
-            AiTool::Copilot => "gpt-5",
+            AiTool::Copilot => "gpt-5.4",
             #[cfg(feature = "copilot-sdk")]
-            AiTool::CopilotSdk => "gpt-5",
+            AiTool::CopilotSdk => "gpt-5.4",
             AiTool::Codex => "gpt-5-codex",
         }
     }
