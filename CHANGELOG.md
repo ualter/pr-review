@@ -1,3 +1,11 @@
+## v0.1.4
+
+  - add Copilot AI usage reporting for credits, tokens, and elapsed AI time
+  - parse Copilot usage metadata from CLI output without polluting saved review content
+  - show Copilot usage summaries after full reviews and interactive follow-up answers
+  - refine the prompt budget panel styling, hierarchy, and fixed-width background rendering
+  - limit the black usage separator line to interactive session answers only
+
 ## v0.1.3
 
   - add prompt budget reporting before AI review execution
