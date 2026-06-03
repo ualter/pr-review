@@ -42,6 +42,22 @@ pub struct LoadedReviewMeta {
 
 pub struct AiRunResult {
     pub output: String,
+    pub usage: Option<AiUsage>,
+}
+
+struct CommandStreamResult {
+    stdout: String,
+    stderr: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AiUsage {
+    pub credits: Option<f64>,
+    pub elapsed_seconds: Option<u64>,
+    pub input_tokens: Option<f64>,
+    pub cached_input_tokens: Option<f64>,
+    pub output_tokens: Option<f64>,
+    pub reasoning_tokens: Option<f64>,
 }
 
 pub fn write_review_meta(
@@ -225,24 +241,29 @@ where
                     "Read and follow the complete PR review prompt in this file:\n\n{}\n\nTreat that file as the full instructions and source of truth.",
                     prompt_file.path().display()
                 );
+                let command_result = run_command_streaming(
+                    Path::new("."),
+                    "copilot",
+                    &["--model", &runtime.model, "-p", &small_prompt],
+                    on_chunk,
+                )?;
 
-                Ok(AiRunResult {
-                    output: run_command_streaming(
-                        Path::new("."),
-                        "copilot",
-                        &["--model", &runtime.model, "-p", &small_prompt],
-                        on_chunk,
-                    )?,
-                })
+                Ok(split_copilot_output_and_usage(
+                    &command_result.stdout,
+                    &command_result.stderr,
+                ))
             } else {
-                Ok(AiRunResult {
-                    output: run_command_streaming(
-                        Path::new("."),
-                        "copilot",
-                        &["--model", &runtime.model, "-p", prompt],
-                        on_chunk,
-                    )?,
-                })
+                let command_result = run_command_streaming(
+                    Path::new("."),
+                    "copilot",
+                    &["--model", &runtime.model, "-p", prompt],
+                    on_chunk,
+                )?;
+
+                Ok(split_copilot_output_and_usage(
+                    &command_result.stdout,
+                    &command_result.stderr,
+                ))
             }
         }
         #[cfg(feature = "copilot-sdk")]
@@ -257,8 +278,121 @@ where
                 prompt,
                 on_chunk,
             )?,
+            usage: None,
         }),
     }
+}
+
+fn split_copilot_output_and_usage(stdout_text: &str, stderr_text: &str) -> AiRunResult {
+    let usage = extract_copilot_usage(stdout_text).or_else(|| extract_copilot_usage(stderr_text));
+
+    let output = strip_copilot_usage_footer(stdout_text);
+
+    AiRunResult { output, usage }
+}
+
+fn extract_copilot_usage(text: &str) -> Option<AiUsage> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut idx = lines.len();
+
+    while idx > 0 && lines[idx - 1].trim().is_empty() {
+        idx -= 1;
+    }
+
+    if idx < 2 {
+        return None;
+    }
+
+    let tokens_line = lines[idx - 1].trim();
+    let credits_line = lines[idx - 2].trim();
+    parse_ai_usage(credits_line, tokens_line)
+}
+
+fn strip_copilot_usage_footer(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut idx = lines.len();
+
+    while idx > 0 && lines[idx - 1].trim().is_empty() {
+        idx -= 1;
+    }
+
+    if idx >= 2 {
+        let tokens_line = lines[idx - 1].trim();
+        let credits_line = lines[idx - 2].trim();
+        if parse_ai_usage(credits_line, tokens_line).is_some() {
+            let changes_idx = if idx >= 3 && lines[idx - 3].trim().starts_with("Changes") {
+                idx - 3
+            } else {
+                idx - 2
+            };
+            return lines[..changes_idx].join("\n").trim_end().to_string();
+        }
+    }
+
+    text.trim_end().to_string()
+}
+
+fn parse_ai_usage(credits_line: &str, tokens_line: &str) -> Option<AiUsage> {
+    if !credits_line.starts_with("AI Credits") || !tokens_line.starts_with("Tokens") {
+        return None;
+    }
+
+    let credits_payload = credits_line.strip_prefix("AI Credits")?.trim();
+    let (credits_str, elapsed_part) = credits_payload.split_once(' ')?;
+    let credits = credits_str.parse::<f64>().ok();
+    let elapsed_seconds = elapsed_part
+        .trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .trim_end_matches('s')
+        .parse::<u64>()
+        .ok();
+
+    let tokens_payload = tokens_line.strip_prefix("Tokens")?.trim();
+    let (input_part, output_part) = tokens_payload.split_once('•')?;
+    let input_section = input_part.trim().trim_start_matches('↑').trim();
+    let output_section = output_part.trim().trim_start_matches('↓').trim();
+
+    let input_tokens = parse_first_token_value(input_section);
+    let cached_input_tokens = parse_parenthetical_value(input_section, "cached");
+    let output_tokens = parse_first_token_value(output_section);
+    let reasoning_tokens = parse_parenthetical_value(output_section, "reasoning");
+
+    Some(AiUsage {
+        credits,
+        elapsed_seconds,
+        input_tokens,
+        cached_input_tokens,
+        output_tokens,
+        reasoning_tokens,
+    })
+}
+
+fn parse_first_token_value(section: &str) -> Option<f64> {
+    section
+        .split_whitespace()
+        .next()
+        .and_then(parse_token_value)
+}
+
+fn parse_parenthetical_value(section: &str, label: &str) -> Option<f64> {
+    let start = section.find('(')?;
+    let end = section[start..].find(')')? + start;
+    let inner = section[start + 1..end].trim();
+    let suffix = format!(" {label}");
+    let number = inner.strip_suffix(&suffix)?.trim();
+    parse_token_value(number)
+}
+
+fn parse_token_value(value: &str) -> Option<f64> {
+    let trimmed = value.trim();
+    let (number_str, multiplier) = if let Some(number) = trimmed.strip_suffix('k') {
+        (number, 1000.0)
+    } else {
+        (trimmed, 1.0)
+    };
+
+    number_str.parse::<f64>().ok().map(|v| v * multiplier)
 }
 
 fn run_command_streaming<F>(
@@ -266,7 +400,7 @@ fn run_command_streaming<F>(
     program: &str,
     args: &[&str],
     mut on_chunk: F,
-) -> Result<String>
+) -> Result<CommandStreamResult>
 where
     F: FnMut(&str),
 {
@@ -325,7 +459,10 @@ where
         ));
     }
 
-    Ok(collected)
+    Ok(CommandStreamResult {
+        stdout: collected,
+        stderr: String::from_utf8_lossy(&stderr).to_string(),
+    })
 }
 
 fn run_command_with_stdin_streaming<F>(

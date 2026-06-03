@@ -3,7 +3,10 @@ use dialoguer::{
     theme::ColorfulTheme,
 };
 
-use crate::cli::{AiRuntime, AiTool};
+use crate::{
+    artifacts::AiUsage,
+    cli::{AiRuntime, AiTool},
+};
 use crate::config::{PromptStyle, user_config};
 use anyhow::Result;
 use std::{
@@ -333,6 +336,34 @@ pub fn print_report(
     println!("{BLUE_BOLD}{LINE}{RESET}");
 }
 
+pub fn print_ai_usage(usage: &AiUsage) {
+    if let Some(credits) = usage.credits {
+        println!("{GREEN_BOLD}💳 AI Credits:{RESET} {:.2}", credits);
+    }
+
+    let mut token_parts = Vec::new();
+    if let Some(input) = usage.input_tokens {
+        token_parts.push(format!("↑ {} input", format_usage_tokens(input)));
+    }
+    if let Some(cached) = usage.cached_input_tokens {
+        token_parts.push(format!("{} cached", format_usage_tokens(cached)));
+    }
+    if let Some(output) = usage.output_tokens {
+        token_parts.push(format!("↓ {} output", format_usage_tokens(output)));
+    }
+    if let Some(reasoning) = usage.reasoning_tokens {
+        token_parts.push(format!("{} reasoning", format_usage_tokens(reasoning)));
+    }
+
+    if !token_parts.is_empty() {
+        println!("{BLUE_BOLD}🧮 Tokens:{RESET} {}", token_parts.join(" / "));
+    }
+
+    if let Some(seconds) = usage.elapsed_seconds {
+        println!("{YELLOW_BOLD}⏱️ AI time:{RESET} {}s", seconds);
+    }
+}
+
 pub fn start_spinner(icon: &str, message: impl Into<String>) -> SpinnerHandle {
     let icon = icon.to_string();
     let message = message.into();
@@ -416,6 +447,14 @@ fn format_elapsed(elapsed: Duration) -> String {
     let minutes = (total % 3600) / 60;
     let seconds = total % 60;
     format!("{hours:02}:{minutes:02}:{seconds:02}")
+}
+
+fn format_usage_tokens(tokens: f64) -> String {
+    if tokens >= 1000.0 {
+        format!("{:.1}k", tokens / 1000.0)
+    } else {
+        format!("{:.0}", tokens)
+    }
 }
 
 pub fn render_interactive_prompt(runtime: &AiRuntime) -> String {

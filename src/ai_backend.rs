@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::{
-    artifacts::{ai_run_debug_mode, run_ai_tool_streaming},
+    artifacts::{AiRunResult, ai_run_debug_mode, run_ai_tool_streaming},
     cli::{AiRuntime, AiTool},
     debug::DEBUG,
 };
@@ -16,7 +16,7 @@ pub enum AiEvent {
 }
 
 pub trait AiBackend {
-    fn run_review(&self, prompt: &str, emit: &mut dyn FnMut(AiEvent)) -> Result<String>;
+    fn run_review(&self, prompt: &str, emit: &mut dyn FnMut(AiEvent)) -> Result<AiRunResult>;
 }
 
 pub fn backend_for_tool(runtime: &AiRuntime) -> Box<dyn AiBackend + '_> {
@@ -39,7 +39,7 @@ impl<'a> CliAiBackend<'a> {
 }
 
 impl AiBackend for CliAiBackend<'_> {
-    fn run_review(&self, prompt: &str, emit: &mut dyn FnMut(AiEvent)) -> Result<String> {
+    fn run_review(&self, prompt: &str, emit: &mut dyn FnMut(AiEvent)) -> Result<AiRunResult> {
         emit(AiEvent::Started);
         emit(AiEvent::Status(format!(
             "{} is starting...",
@@ -61,7 +61,7 @@ impl AiBackend for CliAiBackend<'_> {
         }) {
             Ok(run_result) => {
                 emit(AiEvent::Finished);
-                Ok(run_result.output)
+                Ok(run_result)
             }
             Err(err) => {
                 emit(AiEvent::Failed(err.to_string()));
@@ -85,7 +85,7 @@ impl CopilotSdkBackend {
 
 #[cfg(feature = "copilot-sdk")]
 impl AiBackend for CopilotSdkBackend {
-    fn run_review(&self, prompt: &str, emit: &mut dyn FnMut(AiEvent)) -> Result<String> {
+    fn run_review(&self, prompt: &str, emit: &mut dyn FnMut(AiEvent)) -> Result<AiRunResult> {
         use std::{env, time::Duration};
 
         use anyhow::Context;
@@ -501,7 +501,10 @@ impl AiBackend for CopilotSdkBackend {
 
             let output = result?;
             emit(AiEvent::Finished);
-            Ok(output)
+            Ok(AiRunResult {
+                output,
+                usage: None,
+            })
         })
     }
 }

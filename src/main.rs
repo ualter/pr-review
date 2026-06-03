@@ -33,8 +33,9 @@ use review::{build_prompt, review_commit, review_pr};
 use scm::ScmKind;
 use session::resume_interactive_session;
 use ui::{
-    GREEN, GREEN_BOLD, RESET, YELLOW, print_artifacts, print_report, print_review_flow_header,
-    restore_cursor, start_spinner, StreamingMarkdownFormatter,
+    BLUE_BOLD, GREEN, GREEN_BOLD, LINE, RESET, YELLOW, print_ai_usage, print_artifacts,
+    print_report, print_review_flow_header, restore_cursor, start_spinner,
+    StreamingMarkdownFormatter,
 };
 
 use crate::{
@@ -356,7 +357,7 @@ fn run_review_flow(
             Some(start_spinner(runtime.status_icon(), spinner_label.clone()));
         let mut streamed_anything = false;
         let mut formatter = StreamingMarkdownFormatter::new();
-        let review = backend.run_review(&prompt_arg, &mut |event| match event {
+        let run_result = backend.run_review(&prompt_arg, &mut |event| match event {
             AiEvent::TextDelta(chunk) => {
                 if let Some(active_spinner) = spinner_handler.take() {
                     active_spinner.stop();
@@ -406,7 +407,7 @@ fn run_review_flow(
             println!();
         }
 
-        fs::write(&report_path, &review)
+        fs::write(&report_path, &run_result.output)
             .with_context(|| format!("Failed to write report file: {}", report_path.display()))?;
 
         let archived_report_path = artifact_dir.join("review.md");
@@ -425,8 +426,12 @@ fn run_review_flow(
             ai_start.elapsed(),
             runtime,
         );
+        if let Some(usage) = &run_result.usage {
+            print_ai_usage(usage);
+            println!("{BLUE_BOLD}{LINE}{RESET}");
+        }
 
-        session::prepare_session_artifacts(&artifact_dir, &input, &review, runtime)?;
+        session::prepare_session_artifacts(&artifact_dir, &input, &run_result.output, runtime)?;
 
         if !common.no_interactive {
             session::run_interactive_session(&input, &artifact_dir, runtime)?;

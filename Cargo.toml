@@ -1,6 +1,6 @@
 [package]
 name = "pr-review"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 authors = ["Ualter Otoni <ualter.junior@gmail.com>"]
 description = "AI-powered CLI tool for reviewing pull requests from CodeCommit, Bitbucket, and other platforms."

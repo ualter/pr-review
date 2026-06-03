@@ -16,7 +16,7 @@ use crate::{
     },
     ui::{
         BLACK_BOLD, BLUE_BOLD, GREEN_BOLD, LINE, RESET, YELLOW, YELLOW_BOLD,
-        print_interactive_help, render_interactive_prompt, start_spinner,
+        print_ai_usage, print_interactive_help, render_interactive_prompt, start_spinner,
         StreamingMarkdownFormatter,
     },
 };
@@ -250,7 +250,7 @@ fn process_user_question(
     let mut spinner = Some(start_spinner(tool.status_icon(), spinner_label.clone()));
     let mut streamed_anything = false;
     let mut formatter = StreamingMarkdownFormatter::new();
-    let answer = backend.run_review(&prompt, &mut |event| match event {
+    let run_result = backend.run_review(&prompt, &mut |event| match event {
         AiEvent::TextDelta(chunk) => {
             if let Some(active_spinner) = spinner.take() {
                 active_spinner.stop();
@@ -302,7 +302,12 @@ fn process_user_question(
     if streamed_anything {
         println!();
     }
-    session.append_ai_message(&answer)?;
+    if let Some(usage) = &run_result.usage {
+        println!("{BLACK_BOLD}{LINE}{RESET}");
+        print_ai_usage(usage);
+        println!();
+    }
+    session.append_ai_message(&run_result.output)?;
     Ok(())
 }
 
@@ -445,8 +450,7 @@ fn append_message(path: &Path, role: &str, message: &str) -> Result<()> {
 
 fn run_ai_tool_silently(tool: &AiRuntime, prompt: &str) -> Result<AiRunResult> {
     let backend = backend_for_tool(tool);
-    let output = backend.run_review(prompt, &mut |_| {})?;
-    Ok(AiRunResult { output })
+    backend.run_review(prompt, &mut |_| {})
 }
 
 fn parse_last_command(input: &str, command: &str) -> Result<Option<Option<usize>>> {
